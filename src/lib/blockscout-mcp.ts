@@ -210,6 +210,44 @@ export async function getTransactionsByAddress(
   return result?.data ?? null;
 }
 
+/**
+ * Get detailed info about a specific transaction.
+ * Use for admin history: decode exactly what parameters were passed.
+ */
+export async function getTransactionInfo(
+  txHash: string,
+  chain: keyof typeof MCP_CHAIN_IDS = 'ethereum'
+): Promise<any | null> {
+  await initMcpSession();
+  const result = await mcpCall<{ data: any }>(
+    'get_transaction_info',
+    { chain_id: MCP_CHAIN_IDS[chain], transaction_hash: txHash }
+  );
+  return result?.data ?? null;
+}
+
+/**
+ * Direct Blockscout API call — raw access to any /api/v2/ endpoint.
+ * Use for exotic cases: Gnosis Safe details, diamond proxy facets, etc.
+ *
+ * Example:
+ *   directApiCall('ethereum', '/api/v2/smart-contracts/0x.../methods-read')
+ */
+export async function directApiCall(
+  chain: keyof typeof MCP_CHAIN_IDS = 'ethereum',
+  endpointPath: string,
+  queryParams?: Record<string, string>
+): Promise<any | null> {
+  await initMcpSession();
+  const args: Record<string, any> = {
+    chain_id: MCP_CHAIN_IDS[chain],
+    endpoint_path: endpointPath,
+  };
+  if (queryParams) args.query_params = queryParams;
+  const result = await mcpCall<{ data: any }>('direct_api_call', args);
+  return result?.data ?? null;
+}
+
 // ─── Convenience ABIs for common owner/admin functions ───────────────────────
 
 export const ABIS = {
