@@ -26,14 +26,20 @@ export async function getContractSourceBlockscout(
       .filter(Boolean)
       .join('\n\n');
 
+    const implementation =
+      data.implementations?.[0]?.address_hash ||
+      data.implementation_address?.address_hash ||
+      data.implementation_address ||
+      data.minimal_proxy_address_hash ||
+      undefined;
+
     return {
       contractName: data.name || 'Unknown',
       sourceCode,
       abi: data.abi || [],
       compilerVersion: data.compiler_version || '',
-      isProxy: !!(data.minimal_proxy_address_hash || data.implementation_address),
-      implementation:
-        data.implementation_address || data.minimal_proxy_address_hash || undefined,
+      isProxy: !!(data.proxy_type || data.implementations?.length || implementation),
+      implementation,
       isVerified: true,
     };
   } catch {

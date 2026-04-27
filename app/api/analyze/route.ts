@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getContractSourceBlockscout } from '@/lib/blockscout';
 import { getContractSource } from '@/lib/etherscan';
 import { resolveProxy } from '@/lib/proxy-resolver';
+import { extractPermissionedFunctions } from '@/lib/permission-extractor';
+import { buildRedFlags, scorePermissions, summarizePermissions, riskLevel } from '@/lib/risk-engine';
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,6 +45,10 @@ export async function POST(req: NextRequest) {
     }
 
     const analysisSource = implementationSource || source;
+    const permissionedFunctions = extractPermissionedFunctions(analysisSource.sourceCode);
+    const redFlags = buildRedFlags(permissionedFunctions, proxyInfo);
+    const { riskScore, riskBreakdown } = scorePermissions(permissionedFunctions, proxyInfo);
+    const summary = summarizePermissions(permissionedFunctions, redFlags, riskScore);
 
     return NextResponse.json({
       address: normalizedAddress,
@@ -51,15 +57,15 @@ export async function POST(req: NextRequest) {
       hasSource: true,
       sourceLength: analysisSource.sourceCode.length,
       analysisTimestamp: Date.now(),
-      // Full analysis pipeline: Days 2–4
       ownershipChain: null,
-      permissionedFunctions: [],
-      redFlags: [],
-      riskScore: 0,
-      riskLevel: 'PENDING',
+      permissionedFunctions,
+      redFlags,
+      riskScore,
+      riskLevel: riskLevel(riskScore),
+      riskBreakdown,
       adminHistory: [],
-      summary: 'Analysis engine in progress — full results coming Day 2–4.',
-      _status: 'scaffold_complete',
+      ...summary,
+      _status: 'permission_extractor_complete',
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

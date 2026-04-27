@@ -24,6 +24,11 @@ export interface PermissionedFunction {
   mutability: string;
   isCritical: boolean;
   category: 'funds' | 'parameters' | 'permissions' | 'pausability' | 'upgradeability' | 'other';
+  lineNumber?: number;
+  parameters?: string[];
+  returnValues?: string[];
+  accessControl?: string[];
+  riskFactors?: string[];
   plainEnglish?: string;
 }
 
