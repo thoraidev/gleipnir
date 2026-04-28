@@ -35,6 +35,27 @@ const CRITICAL_NAME_RE = PRIVILEGED_NAME_RE;
 const EXTERNAL_CALL_RE = /\bdelegatecall\b|\.call\s*\{|\.call\s*\(|\.staticcall\s*\(|\.callcode\s*\(/i;
 const ASSEMBLY_RE = /\bassembly\s*\{/i;
 const MODERATING_MODIFIER_RE = /\b(nonReentrant|whenNotPaused|whenPaused|rateLimit(?:ed)?|timelock(?:ed)?|onlyTimelock|delay(?:ed)?)\b/i;
+const EXPLICIT_PRIVILEGED_MODIFIER_RE =
+  /^(only|requires?)(Owner|Admin|Role|Govern|Guardian|Manager|Operator|Controller|Authority|Auth|Timelock|PoolConfigurator|PoolAdmin|Emergency|Risk|Bridge|Umbrella)/;
+
+const ERC_STANDARD_USER_SIGNATURES = new Set([
+  // ERC-20 user operations
+  'transfer(address,uint256)',
+  'transferFrom(address,address,uint256)',
+  'approve(address,uint256)',
+  'increaseAllowance(address,uint256)',
+  'decreaseAllowance(address,uint256)',
+  'permit(address,address,uint256,uint256,uint8,bytes32,bytes32)',
+
+  // ERC-721 user operations
+  'safeTransferFrom(address,address,uint256)',
+  'safeTransferFrom(address,address,uint256,bytes)',
+  'setApprovalForAll(address,bool)',
+
+  // ERC-1155 user operations
+  'safeTransferFrom(address,address,uint256,uint256,bytes)',
+  'safeBatchTransferFrom(address,address,uint256[],uint256[],bytes)',
+]);
 
 type FunctionKind = 'function' | 'constructor' | 'fallback' | 'receive';
 type SolidityScopeKind = 'contract' | 'abstract contract' | 'interface' | 'library' | 'unknown';
@@ -296,6 +317,17 @@ function functionSignature(fn: ParsedFunction): string {
   return `${fn.name}(${types})`;
 }
 
+function isErcStandardUserOperation(signature: string, accessEvidence: PermissionEvidence[]): boolean {
+  if (!ERC_STANDARD_USER_SIGNATURES.has(signature)) return false;
+
+  // Standard transfer/approval functions often contain msg.sender/owner/approval checks.
+  // Those are user-level token authorization checks, not protocol-admin permissions. If a
+  // project adds an explicit privileged modifier to a standard function, keep it visible.
+  return !accessEvidence.some(
+    (item) => item.source === 'modifier' && item.modifier && EXPLICIT_PRIVILEGED_MODIFIER_RE.test(item.modifier)
+  );
+}
+
 function looksAccessLike(token: string): boolean {
   if (/^only[A-Z_]/.test(token)) return true;
   if (/^requires?[A-Z_]/.test(token)) return true;
@@ -539,6 +571,9 @@ export function extractPermissionedFunctions(sourceCode: string, options: Extrac
 
     const category = categorize(fn.name, evidence);
     const isReadOnly = mutability === 'view' || mutability === 'pure';
+    const signature = functionSignature(fn);
+    if (isErcStandardUserOperation(signature, accessEvidence)) continue;
+
     const shouldInclude =
       accessEvidence.length > 0 ||
       (!isReadOnly && dangerousEvidence.length > 0) ||
@@ -567,7 +602,7 @@ export function extractPermissionedFunctions(sourceCode: string, options: Extrac
 
     const permissioned: PermissionedFunction = {
       functionName: fn.name,
-      functionSignature: functionSignature(fn),
+      functionSignature: signature,
       modifier: primary.modifier ?? primary.source,
       roleOrAddress: primary.roleOrAddress ?? (accessEvidence.length === 0 ? 'public/external caller' : 'restricted caller'),
       accessType,

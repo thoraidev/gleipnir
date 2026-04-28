@@ -1,6 +1,7 @@
 import { getContractSourceBlockscout } from './blockscout';
 import { getContractSource } from './etherscan';
 import { extractPermissionedFunctions } from './permission-extractor';
+import { resolveOwnershipChain } from './ownership-resolver';
 import { resolveProxy } from './proxy-resolver';
 import { buildRedFlags, riskLevel, scorePermissions, summarizePermissions } from './risk-engine';
 import type { AnalysisResult } from './types';
@@ -12,6 +13,17 @@ export interface ContractAnalysis extends AnalysisResult {
   sourceLength: number;
   _status: string;
 }
+
+const ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const analysisCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    value?: ContractAnalysis;
+    promise?: Promise<ContractAnalysis>;
+  }
+>();
 
 export class AnalyzeContractError extends Error {
   status: number;
@@ -42,7 +54,32 @@ export async function analyzeContract(
   chain: SupportedChain = 'ethereum'
 ): Promise<ContractAnalysis> {
   const normalizedAddress = normalizeAddress(address);
+  const cacheKey = `${chain}:${normalizedAddress}`;
+  const now = Date.now();
+  const cached = analysisCache.get(cacheKey);
 
+  if (cached && cached.expiresAt > now) {
+    if (cached.value) return cached.value;
+    if (cached.promise) return cached.promise;
+  }
+
+  const promise = analyzeContractUncached(normalizedAddress, chain);
+  analysisCache.set(cacheKey, { expiresAt: now + ANALYSIS_CACHE_TTL_MS, promise });
+
+  try {
+    const value = await promise;
+    analysisCache.set(cacheKey, { expiresAt: Date.now() + ANALYSIS_CACHE_TTL_MS, value });
+    return value;
+  } catch (error) {
+    analysisCache.delete(cacheKey);
+    throw error;
+  }
+}
+
+async function analyzeContractUncached(
+  normalizedAddress: string,
+  chain: SupportedChain
+): Promise<ContractAnalysis> {
   let source = await getContractSourceBlockscout(normalizedAddress, chain);
   if (!source) source = await getContractSource(normalizedAddress, chain);
 
@@ -71,6 +108,7 @@ export async function analyzeContract(
   const redFlags = buildRedFlags(permissionedFunctions, proxyInfo);
   const { riskScore, riskBreakdown } = scorePermissions(permissionedFunctions, proxyInfo);
   const summary = summarizePermissions(permissionedFunctions, redFlags, riskScore);
+  const ownershipChain = await resolveOwnershipChain(normalizedAddress, chain, proxyInfo);
 
   return {
     address: normalizedAddress,
@@ -79,7 +117,7 @@ export async function analyzeContract(
     hasSource: true,
     sourceLength: analysisSource.sourceCode.length,
     analysisTimestamp: Date.now(),
-    ownershipChain: null,
+    ownershipChain,
     permissionedFunctions,
     redFlags,
     riskScore,

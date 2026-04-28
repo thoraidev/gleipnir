@@ -177,6 +177,50 @@ function ProxyCard({ analysis }: { analysis: ContractAnalysis }) {
   );
 }
 
+function OwnershipCard({ analysis }: { analysis: ContractAnalysis }) {
+  const ownership = analysis.ownershipChain;
+  const owner = ownership?.directOwner;
+
+  return (
+    <div className="rounded-2xl border border-gray-800 bg-gray-900/40 p-5">
+      <h2 className="text-lg font-semibold text-white">Control surface</h2>
+      {owner ? (
+        <div className="mt-4 space-y-2 text-sm">
+          <div className="flex justify-between gap-4">
+            <span className="text-gray-500">Ultimate control</span>
+            <span className="text-right text-gray-200">{ownership.ultimateControl}</span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-gray-500">Type</span>
+            <span className="text-gray-200">{owner.type}</span>
+          </div>
+          <div className="flex justify-between gap-4">
+            <span className="text-gray-500">Address</span>
+            <span className="font-mono text-gray-200">{formatAddress(owner.address)}</span>
+          </div>
+          {owner.threshold && owner.signerCount && (
+            <div className="flex justify-between gap-4">
+              <span className="text-gray-500">Threshold</span>
+              <span className="text-gray-200">{owner.threshold}/{owner.signerCount}</span>
+            </div>
+          )}
+          {typeof owner.delay === 'number' && (
+            <div className="flex justify-between gap-4">
+              <span className="text-gray-500">Delay</span>
+              <span className="text-gray-200">{owner.delay}s</span>
+            </div>
+          )}
+          {owner.label && <p className="pt-2 text-xs text-gray-500">Detected via {owner.label}.</p>}
+        </div>
+      ) : (
+        <p className="mt-4 text-sm text-gray-400">
+          No owner/admin view resolved yet. The next pass will trace protocol-specific ACL managers and configurators.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function FunctionList({ functions }: { functions: PermissionedFunction[] }) {
   return (
     <section className="rounded-2xl border border-gray-800 bg-gray-900/40 p-5">
@@ -324,6 +368,7 @@ export default async function ReportPage({ params, searchParams }: Props) {
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <RiskMeter analysis={analysis} />
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-1">
+            <OwnershipCard analysis={analysis} />
             <ProxyCard analysis={analysis} />
             <Breakdown breakdown={analysis.riskBreakdown} />
           </div>
@@ -334,8 +379,8 @@ export default async function ReportPage({ params, searchParams }: Props) {
 
         <div className="rounded-2xl border border-gray-800 bg-gray-900/30 p-5 text-sm text-gray-400">
           <p>
-            Deterministic MVP analysis. This is not a formal audit. Inheritance/import resolution,
-            ownership-chain detection, multisig/timelock labels, and LLM explanations are next.
+            Deterministic MVP analysis. This is not a formal audit. Deeper ACL tracing,
+            protocol-specific ownership graphs, admin history, and LLM explanations are next.
           </p>
           <p className="mt-2 font-mono text-xs text-gray-600">
             Source bytes analyzed: {analysis.sourceLength.toLocaleString()} · API status: {analysis._status}

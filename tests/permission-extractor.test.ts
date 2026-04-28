@@ -184,3 +184,84 @@ contract TargetPool is SharedBase {
   assert.equal(byName.get('setReserveFactor')?.sourceContract, 'TargetPool');
   assert.ok(!byName.has('setOracle'));
 });
+
+test('excludes standard ERC20/ERC721/ERC1155 user authorization flows', () => {
+  const source = `
+contract TokenLike {
+  address public owner;
+  mapping(address => mapping(address => uint256)) public allowance;
+  mapping(address => mapping(address => bool)) public operatorApprovals;
+
+  modifier onlyOwner() { require(msg.sender == owner, "not owner"); _; }
+
+  function transfer(address to, uint256 amount) external returns (bool) {
+    require(to != address(0)); amount; return true;
+  }
+
+  function approve(address spender, uint256 amount) external returns (bool) {
+    allowance[msg.sender][spender] = amount; return true;
+  }
+
+  function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+    require(from == msg.sender || allowance[from][msg.sender] >= amount, "not approved");
+    to; return true;
+  }
+
+  function safeTransferFrom(address from, address to, uint256 tokenId) external {
+    require(_isApprovedOrOwner(msg.sender, tokenId), "not approved"); from; to;
+  }
+
+  function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata data) external {
+    require(_isApprovedOrOwner(msg.sender, tokenId), "not approved"); from; to; data;
+  }
+
+  function setApprovalForAll(address operator, bool approved) external {
+    operatorApprovals[msg.sender][operator] = approved;
+  }
+
+  function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata data) external {
+    require(from == msg.sender || operatorApprovals[from][msg.sender], "not approved"); to; id; amount; data;
+  }
+
+  function safeBatchTransferFrom(address from, address to, uint256[] calldata ids, uint256[] calldata amounts, bytes calldata data) external {
+    require(from == msg.sender || operatorApprovals[from][msg.sender], "not approved"); to; ids; amounts; data;
+  }
+
+  function mint(address to, uint256 amount) external onlyOwner { to; amount; }
+  function transferOwnership(address newOwner) external onlyOwner { owner = newOwner; }
+
+  function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns (bool) {
+    spender; tokenId; return true;
+  }
+}
+`;
+
+  const functions = extractPermissionedFunctions(source, { targetContractName: 'TokenLike' });
+  const byName = new Map(functions.map((fn) => [fn.functionName, fn]));
+
+  assert.ok(!byName.has('transfer'));
+  assert.ok(!byName.has('approve'));
+  assert.ok(!byName.has('transferFrom'));
+  assert.ok(!byName.has('safeTransferFrom'));
+  assert.ok(!byName.has('setApprovalForAll'));
+  assert.ok(!byName.has('safeBatchTransferFrom'));
+  assert.equal(byName.get('mint')?.roleOrAddress, 'owner');
+  assert.equal(byName.get('transferOwnership')?.category, 'permissions');
+});
+
+test('keeps non-standard privileged ERC-shaped functions visible', () => {
+  const source = `
+contract WeirdToken {
+  address public owner;
+  modifier onlyOwner() { require(msg.sender == owner, "not owner"); _; }
+
+  function transferFrom(address from, address to, uint256 amount) external onlyOwner returns (bool) {
+    from; to; amount; return true;
+  }
+}
+`;
+
+  const functions = extractPermissionedFunctions(source, { targetContractName: 'WeirdToken' });
+  assert.equal(functions[0]?.functionName, 'transferFrom');
+  assert.equal(functions[0]?.roleOrAddress, 'owner');
+});

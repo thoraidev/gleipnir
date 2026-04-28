@@ -38,15 +38,6 @@ export async function resolveProxy(
   address: string,
   etherscanImpl?: string
 ): Promise<ProxyInfo> {
-  // Trust Blockscout/Etherscan if they already flagged it
-  if (etherscanImpl) {
-    return {
-      isProxy: true,
-      proxyType: 'Transparent',
-      implementationAddress: etherscanImpl,
-    };
-  }
-
   // Read EIP-1967 slots in parallel
   const [implSlot, adminSlot, beaconSlot] = await Promise.all([
     readStorageSlot(address, IMPL_SLOT),
@@ -55,11 +46,14 @@ export async function resolveProxy(
   ]);
 
   const implAddr = slotToAddress(implSlot);
-  if (implAddr) {
+  const explorerImpl = etherscanImpl && /^0x[a-fA-F0-9]{40}$/.test(etherscanImpl) ? etherscanImpl : undefined;
+  const implementationAddress = implAddr || explorerImpl;
+
+  if (implementationAddress) {
     return {
       isProxy: true,
-      proxyType: 'EIP-1967',
-      implementationAddress: implAddr,
+      proxyType: implAddr ? 'EIP-1967' : 'Transparent',
+      implementationAddress,
       adminAddress: slotToAddress(adminSlot) || undefined,
     };
   }
