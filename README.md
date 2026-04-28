@@ -72,3 +72,5 @@ Primary data source: **Blockscout** (no API key needed). Etherscan is fallback o
 - **Deployment**: Railway
 
 ## Built at ETHGlobal Open Agents — April 24–May 3, 2026
+
+See [`BUILD_LOG.md`](./BUILD_LOG.md) for the Gleipnir-specific ETH hackathon build log.
