@@ -29,13 +29,22 @@ const ACCESS_WORDS = [
   'whitelist',
 ];
 
-const CRITICAL_NAME_RE =
-  /(upgrade|implementation|beacon|proxy|admin|owner|role|govern|guardian|pause|unpause|withdraw|sweep|rescue|drain|mint|burn|blacklist|freeze|oracle|fee|treasury|emergency|delegatecall|execute|call)/i;
+const PRIVILEGED_NAME_RE =
+  /(upgrade|implementation|beacon|proxy|admin|owner|govern|guardian|pause|unpause|sweep|rescue|drain|blacklist|freeze|oracle|fee|emergency|delegatecall|grant\w*role|revoke\w*role|set\w*role|role\w*admin)/i;
+const CRITICAL_NAME_RE = PRIVILEGED_NAME_RE;
 const EXTERNAL_CALL_RE = /\bdelegatecall\b|\.call\s*\{|\.call\s*\(|\.staticcall\s*\(|\.callcode\s*\(/i;
 const ASSEMBLY_RE = /\bassembly\s*\{/i;
 const MODERATING_MODIFIER_RE = /\b(nonReentrant|whenNotPaused|whenPaused|rateLimit(?:ed)?|timelock(?:ed)?|onlyTimelock|delay(?:ed)?)\b/i;
 
 type FunctionKind = 'function' | 'constructor' | 'fallback' | 'receive';
+type SolidityScopeKind = 'contract' | 'abstract contract' | 'interface' | 'library' | 'unknown';
+
+interface SolidityScope {
+  kind: SolidityScopeKind;
+  name: string;
+  start: number;
+  end: number;
+}
 
 interface ParsedFunction {
   kind: FunctionKind;
@@ -44,7 +53,10 @@ interface ParsedFunction {
   headerTail: string;
   returns: string;
   body: string;
+  hasBody: boolean;
   lineNumber: number;
+  scopeKind: SolidityScopeKind;
+  scopeName?: string;
 }
 
 interface PermissionEvidence {
@@ -89,8 +101,40 @@ function findTerminator(clean: string, from: number): { index: number; char: '{'
   return undefined;
 }
 
+function parseScopes(clean: string): SolidityScope[] {
+  const scopes: SolidityScope[] = [];
+  const pattern = /\b(?:(abstract)\s+)?(contract|interface|library)\s+([A-Za-z_$][\w$]*)[^{};]*\{/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(clean)) !== null) {
+    const openBrace = clean.indexOf('{', match.index);
+    if (openBrace === -1) continue;
+    const closeBrace = findMatching(clean, openBrace, '{', '}');
+    if (closeBrace === -1) continue;
+
+    const baseKind = match[2] as 'contract' | 'interface' | 'library';
+    const kind: SolidityScopeKind = match[1] && baseKind === 'contract' ? 'abstract contract' : baseKind;
+    scopes.push({
+      kind,
+      name: match[3],
+      start: openBrace,
+      end: closeBrace,
+    });
+  }
+
+  return scopes;
+}
+
+function scopeForIndex(scopes: SolidityScope[], index: number): SolidityScope | undefined {
+  // Pick the innermost scope in case a parser ever sees nested test fixtures.
+  return scopes
+    .filter((scope) => scope.start <= index && index <= scope.end)
+    .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
+}
+
 function parseFunctions(source: string): ParsedFunction[] {
   const clean = stripCommentsAndStrings(source);
+  const scopes = parseScopes(clean);
   const functions: ParsedFunction[] = [];
   const pattern = /\b(function|constructor|fallback|receive)\b/g;
   let match: RegExpExecArray | null;
@@ -119,6 +163,7 @@ function parseFunctions(source: string): ParsedFunction[] {
     const returns = rawHeaderTail.match(/\breturns\s*\(([^)]*)\)/i)?.[1]?.trim() ?? '';
 
     let body = '';
+    const hasBody = terminator.char === '{';
     if (terminator.char === '{') {
       const closeBrace = findMatching(clean, terminator.index, '{', '}');
       if (closeBrace === -1) continue;
@@ -128,6 +173,8 @@ function parseFunctions(source: string): ParsedFunction[] {
       pattern.lastIndex = terminator.index + 1;
     }
 
+    const scope = scopeForIndex(scopes, match.index);
+
     functions.push({
       kind,
       name,
@@ -135,7 +182,10 @@ function parseFunctions(source: string): ParsedFunction[] {
       headerTail: rawHeaderTail,
       returns,
       body,
+      hasBody,
       lineNumber: lineNumberAt(source, match.index),
+      scopeKind: scope?.kind ?? 'unknown',
+      scopeName: scope?.name,
     });
   }
 
@@ -386,7 +436,7 @@ function dedupeEvidence(evidence: PermissionEvidence[]): PermissionEvidence[] {
 }
 
 function hasPotentiallySensitiveName(functionName: string): boolean {
-  return CRITICAL_NAME_RE.test(functionName) || /^(set|update|configure)/i.test(functionName);
+  return PRIVILEGED_NAME_RE.test(functionName);
 }
 
 function riskFactorsFor(fn: ParsedFunction, evidence: PermissionEvidence[], category: PermissionedFunction['category']): string[] {
@@ -419,11 +469,22 @@ export function extractPermissionedFunctions(sourceCode: string): PermissionedFu
     // when public/external functions use the corresponding access modifier.
     if (visibility === 'internal' || visibility === 'private') continue;
 
+    // Declaration-only functions from interfaces/abstract APIs are not callable implementation
+    // surfaces. Verified explorer payloads often concatenate every imported interface; scoring
+    // those declarations creates severe false positives like "anyone can call addPoolAdmin".
+    if (!fn.hasBody) continue;
+
+    // Library functions in concatenated verified source are helper code, not direct user-callable
+    // functions on the analyzed contract. Interprocedural library risk belongs to a later pass that
+    // follows calls from public/external contract entrypoints.
+    if (fn.scopeKind === 'interface' || fn.scopeKind === 'library') continue;
+
     const category = categorize(fn.name, evidence);
+    const isReadOnly = mutability === 'view' || mutability === 'pure';
     const shouldInclude =
       accessEvidence.length > 0 ||
-      dangerousEvidence.length > 0 ||
-      (visibility === 'public' || visibility === 'external') && hasPotentiallySensitiveName(fn.name);
+      (!isReadOnly && dangerousEvidence.length > 0) ||
+      (!isReadOnly && (visibility === 'public' || visibility === 'external') && hasPotentiallySensitiveName(fn.name));
     if (!shouldInclude) continue;
 
     const primary = accessEvidence[0] ?? dangerousEvidence[0] ?? {

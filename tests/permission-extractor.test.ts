@@ -116,3 +116,44 @@ test('risk engine elevates unprotected critical and dangerous internals', () => 
   assert.ok(flags.some((flag) => flag.title === 'Dangerous low-level execution path'));
   assert.ok(riskScore >= 60);
 });
+
+test('ignores imported interfaces and library helpers as direct callable surface', () => {
+  const source = `
+interface IACLManager {
+  function addPoolAdmin(address admin) external;
+  function EMERGENCY_ADMIN_ROLE() external view returns (bytes32);
+}
+
+library BorrowLogic {
+  function executeBorrow(mapping(address => uint256) storage reserves, address user) external {
+    reserves[user] += 1;
+  }
+}
+
+abstract contract AbstractToken {
+  function burn(address from, uint256 amount) external virtual returns (bool);
+}
+
+contract RealPool {
+  address public owner;
+
+  modifier onlyOwner() {
+    require(msg.sender == owner, "not owner");
+    _;
+  }
+
+  function upgradeTo(address implementation) external onlyOwner {
+    implementation.delegatecall("");
+  }
+}
+`;
+
+  const functions = extractPermissionedFunctions(source);
+  const byName = new Map(functions.map((fn) => [fn.functionName, fn]));
+
+  assert.ok(!byName.has('addPoolAdmin'));
+  assert.ok(!byName.has('EMERGENCY_ADMIN_ROLE'));
+  assert.ok(!byName.has('executeBorrow'));
+  assert.ok(!byName.has('burn'));
+  assert.equal(byName.get('upgradeTo')?.roleOrAddress, 'owner');
+});

@@ -158,10 +158,26 @@ export function scorePermissions(
 ): { riskScore: number; riskBreakdown: RiskBreakdown } {
   const criticalCount = permissionedFunctions.filter((fn) => fn.isCritical).length;
   const rawFunctionScore = permissionedFunctions.reduce((sum, fn) => sum + functionWeight(fn), 0);
-  const functions = Math.min(45, rawFunctionScore + criticalCount * 2);
-  const proxy = proxyInfo.isProxy ? 20 : 0;
-  const ownership = permissionedFunctions.some((fn) => fn.category === 'permissions') ? 15 : 4;
-  const timelock = proxyInfo.isProxy ? 12 : 8; // Conservative until the ownership-chain analyzer lands.
+  const unprotectedCriticalCount = permissionedFunctions.filter(
+    (fn) => fn.isCritical && hasRiskFactor(fn, 'unprotected-anyone-callable')
+  ).length;
+  const dangerousInternalCount = permissionedFunctions.filter(
+    (fn) => hasRiskFactor(fn, 'low-level-call') || hasRiskFactor(fn, 'inline-assembly')
+  ).length;
+  const hasPermissionChanges = permissionedFunctions.some((fn) => fn.category === 'permissions');
+  const hasConfirmedDanger = unprotectedCriticalCount > 0 || dangerousInternalCount > 0;
+
+  // A large controlled admin surface is important, but it should not be scored the same as a
+  // confirmed anyone-callable critical path. Keep normal permission-surface weight below the
+  // CRITICAL range until ownership-chain/timelock analysis proves who actually controls it.
+  const functionCap = hasConfirmedDanger ? 45 : 30;
+  const functions = Math.min(
+    functionCap,
+    rawFunctionScore + criticalCount + unprotectedCriticalCount * 8 + dangerousInternalCount * 6
+  );
+  const proxy = proxyInfo.isProxy ? 15 : 0;
+  const ownership = hasPermissionChanges ? 12 : proxyInfo.isProxy ? 8 : 4;
+  const timelock = proxyInfo.isProxy ? 10 : 5; // Conservative until the ownership-chain analyzer lands.
   const activity = 0;
 
   const riskBreakdown: RiskBreakdown = {
