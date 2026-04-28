@@ -157,3 +157,30 @@ contract RealPool {
   assert.ok(!byName.has('burn'));
   assert.equal(byName.get('upgradeTo')?.roleOrAddress, 'owner');
 });
+
+test('filters to target contract plus inherited base contracts', () => {
+  const source = `
+contract SharedBase {
+  address public owner;
+  modifier onlyOwner() { require(msg.sender == owner, "not owner"); _; }
+  function rescueTokens(address token) external onlyOwner { token.call(""); }
+}
+
+contract UnrelatedAdminSurface {
+  function setOracle(address oracle) external { oracle; }
+}
+
+contract TargetPool is SharedBase {
+  function setReserveFactor(uint256 factor) external onlyOwner { factor; }
+}
+`;
+
+  const functions = extractPermissionedFunctions(source, { targetContractName: 'TargetPool' });
+  const byName = new Map(functions.map((fn) => [fn.functionName, fn]));
+
+  assert.ok(byName.has('rescueTokens'));
+  assert.equal(byName.get('rescueTokens')?.sourceContract, 'SharedBase');
+  assert.ok(byName.has('setReserveFactor'));
+  assert.equal(byName.get('setReserveFactor')?.sourceContract, 'TargetPool');
+  assert.ok(!byName.has('setOracle'));
+});

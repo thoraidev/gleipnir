@@ -204,7 +204,8 @@ function FunctionList({ functions }: { functions: PermissionedFunction[] }) {
                 </div>
                 <p className="mt-2 text-sm text-gray-300">{fn.plainEnglish}</p>
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
-                  <span>Caller: {fn.roleOrAddress}</span>
+                  <span>Access: {fn.accessType === 'protected' ? `protected by ${fn.roleOrAddress}` : fn.roleOrAddress}</span>
+                  {fn.sourceContract && <span>Source: {fn.sourceContract}</span>}
                   <span>Visibility: {fn.visibility}</span>
                   <span>Mutability: {fn.mutability}</span>
                   {fn.lineNumber && <span>Line: {fn.lineNumber}</span>}

@@ -20,6 +20,8 @@ export interface PermissionedFunction {
   functionSignature: string;
   modifier: string;
   roleOrAddress: string;
+  accessType?: 'protected' | 'unprotected' | 'dangerous-internal';
+  sourceContract?: string;
   visibility: string;
   mutability: string;
   isCritical: boolean;

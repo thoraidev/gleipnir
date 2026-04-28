@@ -65,7 +65,9 @@ export async function analyzeContract(
   }
 
   const analysisSource = implementationSource || source;
-  const permissionedFunctions = extractPermissionedFunctions(analysisSource.sourceCode);
+  const permissionedFunctions = extractPermissionedFunctions(analysisSource.sourceCode, {
+    targetContractName: analysisSource.contractName,
+  });
   const redFlags = buildRedFlags(permissionedFunctions, proxyInfo);
   const { riskScore, riskBreakdown } = scorePermissions(permissionedFunctions, proxyInfo);
   const summary = summarizePermissions(permissionedFunctions, redFlags, riskScore);

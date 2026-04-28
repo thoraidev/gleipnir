@@ -42,6 +42,7 @@ type SolidityScopeKind = 'contract' | 'abstract contract' | 'interface' | 'libra
 interface SolidityScope {
   kind: SolidityScopeKind;
   name: string;
+  bases: string[];
   start: number;
   end: number;
 }
@@ -64,6 +65,10 @@ interface PermissionEvidence {
   roleOrAddress?: string;
   source: 'modifier' | 'require' | 'body' | 'dangerous-internal';
   expression: string;
+}
+
+interface ExtractOptions {
+  targetContractName?: string;
 }
 
 function stripCommentsAndStrings(input: string): string {
@@ -101,6 +106,33 @@ function findTerminator(clean: string, from: number): { index: number; char: '{'
   return undefined;
 }
 
+function splitTopLevel(input: string, delimiter: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i];
+    if (char === '(' || char === '[' || char === '<') depth += 1;
+    if (char === ')' || char === ']' || char === '>') depth -= 1;
+    if (char === delimiter && depth === 0) {
+      parts.push(input.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  const last = input.slice(start).trim();
+  if (last) parts.push(last);
+  return parts;
+}
+
+function parseBaseNames(header: string): string[] {
+  const inheritance = header.match(/\bis\s+([\s\S]*)$/)?.[1];
+  if (!inheritance) return [];
+  return splitTopLevel(inheritance, ',')
+    .map((item) => item.match(/([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)/)?.[1])
+    .filter((name): name is string => Boolean(name))
+    .map((name) => name.split('.').pop() ?? name);
+}
+
 function parseScopes(clean: string): SolidityScope[] {
   const scopes: SolidityScope[] = [];
   const pattern = /\b(?:(abstract)\s+)?(contract|interface|library)\s+([A-Za-z_$][\w$]*)[^{};]*\{/g;
@@ -111,18 +143,38 @@ function parseScopes(clean: string): SolidityScope[] {
     if (openBrace === -1) continue;
     const closeBrace = findMatching(clean, openBrace, '{', '}');
     if (closeBrace === -1) continue;
+    const header = clean.slice(match.index, openBrace);
 
     const baseKind = match[2] as 'contract' | 'interface' | 'library';
     const kind: SolidityScopeKind = match[1] && baseKind === 'contract' ? 'abstract contract' : baseKind;
     scopes.push({
       kind,
       name: match[3],
+      bases: parseBaseNames(header),
       start: openBrace,
       end: closeBrace,
     });
   }
 
   return scopes;
+}
+
+function collectTargetScopes(scopes: SolidityScope[], targetContractName?: string): Set<string> | null {
+  if (!targetContractName) return null;
+  const byName = new Map(scopes.map((scope) => [scope.name, scope]));
+  if (!byName.has(targetContractName)) return null;
+
+  const reachable = new Set<string>();
+  const visit = (name: string) => {
+    if (reachable.has(name)) return;
+    const scope = byName.get(name);
+    if (!scope) return;
+    reachable.add(name);
+    for (const base of scope.bases) visit(base);
+  };
+
+  visit(targetContractName);
+  return reachable;
 }
 
 function scopeForIndex(scopes: SolidityScope[], index: number): SolidityScope | undefined {
@@ -132,9 +184,10 @@ function scopeForIndex(scopes: SolidityScope[], index: number): SolidityScope | 
     .sort((a, b) => (a.end - a.start) - (b.end - b.start))[0];
 }
 
-function parseFunctions(source: string): ParsedFunction[] {
+function parseFunctions(source: string, options: ExtractOptions = {}): ParsedFunction[] {
   const clean = stripCommentsAndStrings(source);
   const scopes = parseScopes(clean);
+  const targetScopes = collectTargetScopes(scopes, options.targetContractName);
   const functions: ParsedFunction[] = [];
   const pattern = /\b(function|constructor|fallback|receive)\b/g;
   let match: RegExpExecArray | null;
@@ -174,6 +227,9 @@ function parseFunctions(source: string): ParsedFunction[] {
     }
 
     const scope = scopeForIndex(scopes, match.index);
+    if (targetScopes && (!scope?.name || !targetScopes.has(scope.name))) {
+      continue;
+    }
 
     functions.push({
       kind,
@@ -411,7 +467,9 @@ function categorize(functionName: string, evidence: PermissionEvidence[]): Permi
 }
 
 function plainEnglishFor(fn: PermissionedFunction): string {
-  const actor = fn.roleOrAddress || 'a privileged caller';
+  const actor = fn.accessType === 'unprotected'
+    ? 'Any external caller'
+    : fn.roleOrAddress || 'a privileged caller';
   const categoryCopy: Record<PermissionedFunction['category'], string> = {
     funds: 'move, mint, burn, rescue, or otherwise affect funds',
     parameters: 'change protocol parameters or configuration',
@@ -451,8 +509,8 @@ function riskFactorsFor(fn: ParsedFunction, evidence: PermissionEvidence[], cate
   return factors;
 }
 
-export function extractPermissionedFunctions(sourceCode: string): PermissionedFunction[] {
-  const parsed = parseFunctions(sourceCode);
+export function extractPermissionedFunctions(sourceCode: string, options: ExtractOptions = {}): PermissionedFunction[] {
+  const parsed = parseFunctions(sourceCode, options);
   const results: PermissionedFunction[] = [];
 
   for (const fn of parsed) {
@@ -487,10 +545,17 @@ export function extractPermissionedFunctions(sourceCode: string): PermissionedFu
       (!isReadOnly && (visibility === 'public' || visibility === 'external') && hasPotentiallySensitiveName(fn.name));
     if (!shouldInclude) continue;
 
+    const accessType: PermissionedFunction['accessType'] =
+      accessEvidence.length > 0
+        ? 'protected'
+        : dangerousEvidence.length > 0
+          ? 'dangerous-internal'
+          : 'unprotected';
+
     const primary = accessEvidence[0] ?? dangerousEvidence[0] ?? {
       source: 'body' as const,
       modifier: 'none',
-      roleOrAddress: 'anyone',
+      roleOrAddress: 'public/external caller',
       expression: 'no explicit access control detected',
     };
     const riskFactors = riskFactorsFor(fn, evidence, category);
@@ -504,7 +569,9 @@ export function extractPermissionedFunctions(sourceCode: string): PermissionedFu
       functionName: fn.name,
       functionSignature: functionSignature(fn),
       modifier: primary.modifier ?? primary.source,
-      roleOrAddress: primary.roleOrAddress ?? (accessEvidence.length === 0 ? 'anyone' : 'restricted caller'),
+      roleOrAddress: primary.roleOrAddress ?? (accessEvidence.length === 0 ? 'public/external caller' : 'restricted caller'),
+      accessType,
+      sourceContract: fn.scopeName,
       visibility,
       mutability,
       isCritical,
