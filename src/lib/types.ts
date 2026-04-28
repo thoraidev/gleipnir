@@ -83,7 +83,7 @@ export interface AnalysisResult {
   address: string;
   name: string;
   proxyInfo: ProxyInfo;
-  ownershipChain: OwnershipChain;
+  ownershipChain: OwnershipChain | null;
   permissionedFunctions: PermissionedFunction[];
   redFlags: RedFlag[];
   riskScore: number;

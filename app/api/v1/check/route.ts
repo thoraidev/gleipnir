@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AgentCheckResponse } from '@/lib/types';
+import { AnalyzeContractError, analyzeContract, normalizeChain } from '@/lib/analyze-contract';
+import type { AgentCheckResponse } from '@/lib/types';
 
 /**
  * Agent-friendly permission check endpoint.
@@ -11,9 +12,9 @@ import { AgentCheckResponse } from '@/lib/types';
  *   curl "https://gleipnir.up.railway.app/api/v1/check?address=0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"
  */
 export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
+  const { searchParams, origin } = new URL(req.url);
   const address = searchParams.get('address');
-  const chain = (searchParams.get('chain') || 'ethereum') as 'ethereum' | 'base';
+  const chain = normalizeChain(searchParams.get('chain'));
 
   if (!address) {
     return NextResponse.json(
@@ -27,45 +28,43 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || origin).replace(/\/$/, '');
 
   try {
-    const analyzeRes = await fetch(`${baseUrl}/api/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ address, chain }),
-    });
-
-    const data = await analyzeRes.json();
-    if (data.error) {
-      return NextResponse.json(data, { status: analyzeRes.status });
-    }
+    const data = await analyzeContract(address, chain);
 
     const agentResponse: AgentCheckResponse = {
       address: data.address,
       name: data.name,
       riskScore: data.riskScore ?? 0,
       riskLevel: data.riskLevel ?? 'PENDING',
-      ultimateControl: data.ownershipChain?.ultimateControl ?? 'Analysis pending',
-      redFlags: (data.redFlags || []).map((f: any) => ({
-        severity: f.severity,
-        title: f.title,
-        description: f.description,
+      ultimateControl: data.ownershipChain?.ultimateControl ?? 'Ownership-chain analysis pending',
+      redFlags: (data.redFlags || []).map((flag) => ({
+        severity: flag.severity,
+        title: flag.title,
+        description: flag.description,
       })),
-      privilegedFunctions: (data.permissionedFunctions || []).map((f: any) => ({
-        name: f.functionName,
-        calledBy: f.roleOrAddress,
-        plainEnglish: f.plainEnglish || '',
-        category: f.category,
+      privilegedFunctions: (data.permissionedFunctions || []).map((fn) => ({
+        name: fn.functionName,
+        calledBy: fn.roleOrAddress,
+        plainEnglish: fn.plainEnglish || '',
+        category: fn.category,
       })),
       ownershipChain: data.ownershipChain?.chain || [],
       analysisTimestamp: data.analysisTimestamp,
-      gleipnirUrl: `${baseUrl}/report/${address}`,
+      gleipnirUrl: `${baseUrl}/report/${data.address}?chain=${chain}`,
     };
 
     return NextResponse.json(agentResponse);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    if (err instanceof AnalyzeContractError) {
+      return NextResponse.json(
+        { error: err.message, address: err.address },
+        { status: err.status }
+      );
+    }
+
+    const message = err instanceof Error ? err.message : 'Unknown analysis error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
