@@ -117,6 +117,44 @@ test('risk engine elevates unprotected critical and dangerous internals', () => 
   assert.ok(riskScore >= 60);
 });
 
+test('risk engine elevates single EOA token supply control', () => {
+  const source = `
+contract RugToken {
+  address public owner;
+  modifier onlyOwner() { require(msg.sender == owner, "not owner"); _; }
+
+  function mintBulk(address[] calldata recipients, uint256 amount) external onlyOwner {
+    recipients; amount;
+  }
+}
+`;
+
+  const permissionedFunctions = extractPermissionedFunctions(source, { targetContractName: 'RugToken' });
+  const proxyInfo = { isProxy: false, proxyType: 'None' as const };
+  const ownershipChain = {
+    contract: '0x1111111111111111111111111111111111111111',
+    directOwner: {
+      address: '0x2222222222222222222222222222222222222222',
+      type: 'EOA' as const,
+      label: 'owner()',
+    },
+    chain: [
+      {
+        address: '0x2222222222222222222222222222222222222222',
+        type: 'EOA' as const,
+        label: 'owner()',
+      },
+    ],
+    ultimateControl: 'EOA 0x2222…2222',
+  };
+
+  const flags = buildRedFlags(permissionedFunctions, proxyInfo, ownershipChain);
+  const { riskScore } = scorePermissions(permissionedFunctions, proxyInfo, ownershipChain);
+
+  assert.ok(flags.some((flag) => flag.title === 'Single EOA controls token supply'));
+  assert.ok(riskScore >= 60);
+});
+
 test('ignores imported interfaces and library helpers as direct callable surface', () => {
   const source = `
 interface IACLManager {

@@ -439,6 +439,59 @@ Remaining known work:
 - USDC owner resolution currently reports the implementation-level `owner()` EOA. Further work should distinguish proxy admin control from implementation owner control for non-EIP-1967 proxy patterns.
 - Aave still needs protocol-specific ACL graph tracing.
 
+### 2026-04-29 — Phase 1.8 demo API hardening after real-contract matrix
+
+Commit: this checkpoint — `Harden demo API scoring and EOA handling`
+
+After testing the agent-facing `/api/v1/check` endpoint against the proposed demo contract matrix, tightened a few high-leverage presentation and scoring issues.
+
+Demo matrix tested:
+
+- rsETH proxy: `0xa1290d69c65a6fe4df752f95823fae25cb99e5a7`
+- RSETH OFTAdapter: `0x2A1D74de3027ccE18d31011518C571130a4cd513`
+- Kelp deployer EOA: `0x7aad74b7f0d60d5867b59dbd377a71783425af47`
+- Aave V3 Pool: `0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2`
+- USDC: `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`
+- Lido stETH: `0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84`
+- Uniswap V3 Factory: `0x1F98431c8aD98523631AE4a59f267346ea31F984`
+- ENS Registry: `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e`
+- GALA single-EOA mint example: `0x15D4c048f83bd7e37d49EA4C83A07267ec4203Da`
+
+Built:
+
+- Added an explicit non-contract / EOA preflight using Blockscout address metadata.
+  - Previous error: “Contract source not verified...”
+  - New error: `This address is not a smart contract (EOA/wallet). Gleipnir analyzes smart contract permissions.`
+- Risk scoring now receives ownership-chain context.
+- Added `Single EOA controls token supply` red flag for non-proxy contracts where an EOA controls mint / burn / issue authority.
+- Reweighted that pattern so EOA-owned supply-control tokens score as genuinely dangerous instead of merely moderate.
+- ENS Registry ownership now resolves via `owner(bytes32 root node)` and follows the root owner one hop deeper to its timelock.
+- Added `scripts/run-demo-api-tests.mjs` to reproduce the demo matrix API checks and save full JSON outputs locally.
+- Ignored generated `test-outputs/` artifacts so demo JSON can be regenerated without polluting commits.
+
+Updated smoke results:
+
+- rsETH: `RSETH`, `67 / HIGH`, `ProxyAdmin -> 10-day timelock`, 11 privileged functions.
+- RSETH OFTAdapter: `KERNEL_OFTAdapter`, `47 / ELEVATED`, `3/6 multisig`, 9 privileged functions.
+- Kelp deployer EOA: HTTP `422`, explicit EOA/wallet message.
+- Aave V3 Pool: `PoolInstance`, `63 / HIGH`, ownership still pending, 18 privileged functions.
+- USDC: `FiatTokenV2_2`, `67 / HIGH`, centralized control surface remains clear.
+- Lido: `Lido`, `67 / HIGH`, calibrated down from earlier false-positive `CRITICAL` behavior.
+- Uniswap V3 Factory: `UniswapV3Factory`, `41 / ELEVATED`, 2 privileged functions, 2-day timelock.
+- ENS Registry: `ENSRegistryWithFallback`, `47 / ELEVATED`, root owner resolves to 2-day timelock.
+- GALA: `Gala`, moved from `39 / MODERATE` to `73 / HIGH` with `Single EOA controls token supply` red flag.
+
+Verification:
+
+```bash
+npm run lint
+npx tsc --noEmit
+node --experimental-strip-types --test tests/permission-extractor.test.ts
+npm run build
+```
+
+All passed. Test suite now has 8 tests.
+
 ## Verified Gates
 
 Run from `/root/.openclaw/workspace/projects/gleipnir` on 2026-04-27:

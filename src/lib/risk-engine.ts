@@ -1,4 +1,4 @@
-import type { AnalysisResult, PermissionedFunction, ProxyInfo, RedFlag, RiskBreakdown } from './types';
+import type { AnalysisResult, OwnershipChain, PermissionedFunction, ProxyInfo, RedFlag, RiskBreakdown } from './types';
 
 function clampScore(score: number): number {
   return Math.max(0, Math.min(100, Math.round(score)));
@@ -46,13 +46,20 @@ function functionWeight(fn: PermissionedFunction): number {
 
 export function buildRedFlags(
   permissionedFunctions: PermissionedFunction[],
-  proxyInfo: ProxyInfo
+  proxyInfo: ProxyInfo,
+  ownershipChain?: OwnershipChain | null
 ): RedFlag[] {
   const flags: RedFlag[] = [];
   const hasUpgrade = permissionedFunctions.some((fn) => fn.category === 'upgradeability');
   const hasFunds = permissionedFunctions.some((fn) => fn.category === 'funds');
   const hasPause = permissionedFunctions.some((fn) => fn.category === 'pausability');
   const hasPermissionChanges = permissionedFunctions.some((fn) => fn.category === 'permissions');
+  const hasPrivilegedSupplyControl = permissionedFunctions.some(
+    (fn) => fn.category === 'funds' && /\b(mint|mintbulk|issue|burnfrom)\b/i.test(fn.functionName)
+  );
+  const ultimateOwner = ownershipChain?.chain.at(-1);
+  const hasSingleEoaSupplyControl =
+    !proxyInfo.isProxy && ultimateOwner?.type === 'EOA' && hasPrivilegedSupplyControl;
   const hasOracleOrFees = permissionedFunctions.some(
     (fn) => fn.category === 'parameters' && /(oracle|price|fee|rate|limit)/i.test(fn.functionName)
   );
@@ -83,6 +90,15 @@ export function buildRedFlags(
       title: 'Privileged fund-moving function',
       description: 'A privileged caller can mint, burn, withdraw, rescue, or transfer assets.',
       recommendation: 'Inspect exact asset scope and verify controls around the privileged caller.',
+    });
+  }
+
+  if (hasSingleEoaSupplyControl) {
+    flags.push({
+      severity: 'HIGH',
+      title: 'Single EOA controls token supply',
+      description: `A regular wallet (${ultimateOwner.address}) appears to control mint, burn, or issue authority without a detected proxy timelock or multisig.`,
+      recommendation: 'Treat this as a concentrated rug-pull risk unless the owner has been renounced or authority is independently constrained.',
     });
   }
 
@@ -154,7 +170,8 @@ export function buildRedFlags(
 
 export function scorePermissions(
   permissionedFunctions: PermissionedFunction[],
-  proxyInfo: ProxyInfo
+  proxyInfo: ProxyInfo,
+  ownershipChain?: OwnershipChain | null
 ): { riskScore: number; riskBreakdown: RiskBreakdown } {
   const criticalCount = permissionedFunctions.filter((fn) => fn.isCritical).length;
   const rawFunctionScore = permissionedFunctions.reduce((sum, fn) => sum + functionWeight(fn), 0);
@@ -165,6 +182,12 @@ export function scorePermissions(
     (fn) => hasRiskFactor(fn, 'low-level-call') || hasRiskFactor(fn, 'inline-assembly')
   ).length;
   const hasPermissionChanges = permissionedFunctions.some((fn) => fn.category === 'permissions');
+  const hasPrivilegedSupplyControl = permissionedFunctions.some(
+    (fn) => fn.category === 'funds' && /\b(mint|mintbulk|issue|burnfrom)\b/i.test(fn.functionName)
+  );
+  const ultimateOwner = ownershipChain?.chain.at(-1);
+  const hasSingleEoaSupplyControl =
+    !proxyInfo.isProxy && ultimateOwner?.type === 'EOA' && hasPrivilegedSupplyControl;
   const hasConfirmedDanger = unprotectedCriticalCount > 0 || dangerousInternalCount > 0;
 
   // A large controlled admin surface is important, but it should not be scored the same as a
@@ -176,8 +199,8 @@ export function scorePermissions(
     rawFunctionScore + criticalCount + unprotectedCriticalCount * 8 + dangerousInternalCount * 6
   );
   const proxy = proxyInfo.isProxy ? 15 : 0;
-  const ownership = hasPermissionChanges ? 12 : proxyInfo.isProxy ? 8 : 4;
-  const timelock = proxyInfo.isProxy ? 10 : 5; // Conservative until the ownership-chain analyzer lands.
+  const ownership = hasSingleEoaSupplyControl ? 28 : hasPermissionChanges ? 12 : proxyInfo.isProxy ? 8 : 4;
+  const timelock = hasSingleEoaSupplyControl ? 15 : proxyInfo.isProxy ? 10 : 5; // Conservative until the ownership-chain analyzer lands.
   const activity = 0;
 
   const riskBreakdown: RiskBreakdown = {

@@ -5,6 +5,7 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 const SELECTORS = {
   owner: '0x8da5cb5b',
+  ownerRootNode: `0x02571be3${'0'.repeat(64)}`,
   admin: '0xf851a440',
   governance: '0x5aa6e675',
   getOwners: '0xa0e67e2b',
@@ -212,6 +213,11 @@ export async function resolveOwnershipChain(
   if (!directOwnerAddress) {
     directOwnerAddress = await readAddressFunction(chain, normalizedContract, SELECTORS.governance);
     directOwnerLabel = directOwnerAddress ? 'governance()' : undefined;
+  }
+
+  if (!directOwnerAddress) {
+    directOwnerAddress = await readAddressFunction(chain, normalizedContract, SELECTORS.ownerRootNode);
+    directOwnerLabel = directOwnerAddress ? 'owner(bytes32 root node)' : undefined;
   }
 
   if (!directOwnerAddress) return null;

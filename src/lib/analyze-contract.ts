@@ -1,4 +1,4 @@
-import { getContractSourceBlockscout } from './blockscout';
+import { getAddressInfoBlockscout, getContractSourceBlockscout } from './blockscout';
 import { getContractSource } from './etherscan';
 import { extractPermissionedFunctions } from './permission-extractor';
 import { enrichPlainEnglishDescriptions } from './llm-translator';
@@ -81,6 +81,15 @@ async function analyzeContractUncached(
   normalizedAddress: string,
   chain: SupportedChain
 ): Promise<ContractAnalysis> {
+  const addressInfo = await getAddressInfoBlockscout(normalizedAddress, chain);
+  if (addressInfo?.is_contract === false) {
+    throw new AnalyzeContractError(
+      'This address is not a smart contract (EOA/wallet). Gleipnir analyzes smart contract permissions.',
+      422,
+      normalizedAddress
+    );
+  }
+
   let source = await getContractSourceBlockscout(normalizedAddress, chain);
   if (!source) source = await getContractSource(normalizedAddress, chain);
 
@@ -107,10 +116,10 @@ async function analyzeContractUncached(
     targetContractName: analysisSource.contractName,
   });
   permissionedFunctions = await enrichPlainEnglishDescriptions(permissionedFunctions);
-  const redFlags = buildRedFlags(permissionedFunctions, proxyInfo);
-  const { riskScore, riskBreakdown } = scorePermissions(permissionedFunctions, proxyInfo);
-  const summary = summarizePermissions(permissionedFunctions, redFlags, riskScore);
   const ownershipChain = await resolveOwnershipChain(normalizedAddress, chain, proxyInfo);
+  const redFlags = buildRedFlags(permissionedFunctions, proxyInfo, ownershipChain);
+  const { riskScore, riskBreakdown } = scorePermissions(permissionedFunctions, proxyInfo, ownershipChain);
+  const summary = summarizePermissions(permissionedFunctions, redFlags, riskScore);
 
   return {
     address: normalizedAddress,
