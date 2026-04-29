@@ -441,7 +441,7 @@ Remaining known work:
 
 ### 2026-04-29 — Phase 1.8 demo API hardening after real-contract matrix
 
-Commit: this checkpoint — `Harden demo API scoring and EOA handling`
+Commit: `7f3cbb0` — `Harden demo API scoring and EOA handling`
 
 After testing the agent-facing `/api/v1/check` endpoint against the proposed demo contract matrix, tightened a few high-leverage presentation and scoring issues.
 
