@@ -243,6 +243,9 @@ function FunctionList({ functions }: { functions: PermissionedFunction[] }) {
         <h2 className="text-lg font-semibold text-white">Privileged functions</h2>
         <span className="text-xs text-gray-500">{functions.length} extracted</span>
       </div>
+      <p className="mt-2 text-xs text-gray-500">
+        The sentence under each function is the human-readable explanation layer. On report pages, the first few may be polished by Haiku from deterministic findings.
+      </p>
       <div className="mt-4 overflow-hidden rounded-xl border border-gray-800">
         {functions.length === 0 ? (
           <div className="p-5 text-sm text-gray-400">No explicit privileged functions were extracted.</div>
@@ -394,8 +397,9 @@ export default async function ReportPage({ params, searchParams }: Props) {
 
         <div className="rounded-2xl border border-gray-800 bg-gray-900/30 p-5 text-sm text-gray-400">
           <p>
-            Deterministic MVP analysis. This is not a formal audit. Deeper ACL tracing,
-            protocol-specific ownership graphs, admin history, and LLM explanations are next.
+            Deterministic MVP analysis. This is not a formal audit. On report pages, Haiku may rewrite
+            extracted findings into clearer human-readable function explanations; it cannot change callers,
+            categories, scores, or extracted facts.
           </p>
           <p className="mt-2 font-mono text-xs text-gray-600">
             Source bytes analyzed: {analysis.sourceLength.toLocaleString()} · API status: {analysis._status}
