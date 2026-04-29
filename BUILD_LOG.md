@@ -362,8 +362,10 @@ No code changes in this entry. Saved state for a new session before Phase 2.
 
 Current branch state:
 
-- `main` is synced with `origin/main` at `8c3779b`.
-- Railway should be deploying from `8c3779b` or newer.
+- Latest runtime code checkpoint: `8c3779b` — `Implement Phase 1.6 analysis hardening`.
+- Handoff/docs checkpoint is the latest commit on `main`; see `git log -1` for the exact hash.
+- `main` is synced with `origin/main` after the handoff/docs checkpoint.
+- Railway should be deploying the latest `main`; no runtime code changed after `8c3779b`.
 
 Current known priorities from review feedback:
 

@@ -15,11 +15,12 @@ Path: `/root/.openclaw/workspace/projects/gleipnir`
 Git:
 
 ```text
-main == origin/main
-HEAD: 8c3779b Implement Phase 1.6 analysis hardening
+main == origin/main after the handoff/docs checkpoint
+Latest runtime code checkpoint: 8c3779b Implement Phase 1.6 analysis hardening
+Handoff/docs checkpoint: latest commit on main; run git log -1 for the exact hash
 ```
 
-Recent commits:
+Recent runtime-code commits:
 
 ```text
 8c3779b Implement Phase 1.6 analysis hardening
