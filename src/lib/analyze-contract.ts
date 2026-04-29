@@ -15,6 +15,14 @@ export interface ContractAnalysis extends AnalysisResult {
   _status: string;
 }
 
+export interface AnalyzeContractOptions {
+  /**
+   * Human report pages can opt into Haiku narration for friendlier top-function descriptions.
+   * Public API routes should leave this false so agents get deterministic, no-LLM output.
+   */
+  llmDescriptions?: boolean;
+}
+
 const ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const analysisCache = new Map<
@@ -52,10 +60,12 @@ export function normalizeAddress(address: string): string {
 
 export async function analyzeContract(
   address: string,
-  chain: SupportedChain = 'ethereum'
+  chain: SupportedChain = 'ethereum',
+  options: AnalyzeContractOptions = {}
 ): Promise<ContractAnalysis> {
   const normalizedAddress = normalizeAddress(address);
-  const cacheKey = `${chain}:${normalizedAddress}`;
+  const useLlmDescriptions = options.llmDescriptions === true;
+  const cacheKey = `${chain}:${normalizedAddress}:${useLlmDescriptions ? 'llm' : 'deterministic'}`;
   const now = Date.now();
   const cached = analysisCache.get(cacheKey);
 
@@ -64,7 +74,7 @@ export async function analyzeContract(
     if (cached.promise) return cached.promise;
   }
 
-  const promise = analyzeContractUncached(normalizedAddress, chain);
+  const promise = analyzeContractUncached(normalizedAddress, chain, useLlmDescriptions);
   analysisCache.set(cacheKey, { expiresAt: now + ANALYSIS_CACHE_TTL_MS, promise });
 
   try {
@@ -79,7 +89,8 @@ export async function analyzeContract(
 
 async function analyzeContractUncached(
   normalizedAddress: string,
-  chain: SupportedChain
+  chain: SupportedChain,
+  useLlmDescriptions: boolean
 ): Promise<ContractAnalysis> {
   const addressInfo = await getAddressInfoBlockscout(normalizedAddress, chain);
   if (addressInfo?.is_contract === false) {
@@ -115,7 +126,9 @@ async function analyzeContractUncached(
   let permissionedFunctions = extractPermissionedFunctions(analysisSource.sourceCode, {
     targetContractName: analysisSource.contractName,
   });
-  permissionedFunctions = await enrichPlainEnglishDescriptions(permissionedFunctions);
+  if (useLlmDescriptions) {
+    permissionedFunctions = await enrichPlainEnglishDescriptions(permissionedFunctions);
+  }
   const ownershipChain = await resolveOwnershipChain(normalizedAddress, chain, proxyInfo);
   const redFlags = buildRedFlags(permissionedFunctions, proxyInfo, ownershipChain);
   const { riskScore, riskBreakdown } = scorePermissions(permissionedFunctions, proxyInfo, ownershipChain);

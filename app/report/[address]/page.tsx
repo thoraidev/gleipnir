@@ -323,7 +323,7 @@ export default async function ReportPage({ params, searchParams }: Props) {
 
   let analysis: ContractAnalysis;
   try {
-    analysis = await analyzeContract(address, chain);
+    analysis = await analyzeContract(address, chain, { llmDescriptions: true });
   } catch (err: unknown) {
     if (err instanceof AnalyzeContractError) {
       return <ErrorReport address={address} message={err.message} status={err.status} />;

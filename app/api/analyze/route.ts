@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid address' }, { status: 400 });
     }
 
-    const analysis = await analyzeContract(address, normalizeChain(chain));
+    const analysis = await analyzeContract(address, normalizeChain(chain), { llmDescriptions: false });
     return NextResponse.json(analysis);
   } catch (err: unknown) {
     if (err instanceof AnalyzeContractError) {

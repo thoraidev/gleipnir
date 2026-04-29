@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || origin).replace(/\/$/, '');
 
   try {
-    const data = await analyzeContract(address, chain);
+    const data = await analyzeContract(address, chain, { llmDescriptions: false });
 
     const agentResponse: AgentCheckResponse = {
       address: data.address,
