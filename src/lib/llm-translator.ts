@@ -2,7 +2,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { PermissionedFunction } from './types';
 
 const MAX_LLM_FUNCTIONS = 5;
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
+// Hard-code Haiku for demo-cost safety. Do not allow Railway/env overrides to
+// accidentally switch public contract analysis to Sonnet or Opus.
+const MODEL = 'claude-haiku-4-5';
 
 interface LlmDescription {
   functionSignature: string;
