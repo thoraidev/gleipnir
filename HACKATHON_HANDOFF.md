@@ -1,131 +1,203 @@
 # Gleipnir / ETHGlobal Hackathon Handoff
 
-Updated: 2026-04-27 19:24 UTC
+Updated: 2026-04-29 01:20 UTC
 
 ## Current Goal
-Build Gleipnir: smart contract permission extraction and risk scoring for humans and agents.
 
-## Latest Completed Work
-Implemented deterministic TypeScript permission extraction + risk scoring support.
+Build Gleipnir: smart contract permission extraction, risk scoring, and control-surface reporting for humans and agents.
 
-### Parser / Detector
+Core question: **Who can rug this protocol?**
+
+## Current Repo State
+
+Path: `/root/.openclaw/workspace/projects/gleipnir`
+
+Git:
+
+```text
+main == origin/main
+HEAD: 8c3779b Implement Phase 1.6 analysis hardening
+```
+
+Recent commits:
+
+```text
+8c3779b Implement Phase 1.6 analysis hardening
+d6bdb61 Harden Phase 1.5 permission analysis
+285eda8 Reduce false positives in permission analyzer
+8b8f580 Wire report page to Gleipnir analyzer
+0b84d1c Fix Railway Node version and add build log
+14adc0c Build Gleipnir permission analysis MVP
+```
+
+Important docs:
+
+- Build log: `/root/.openclaw/workspace/projects/gleipnir/BUILD_LOG.md`
+- README: `/root/.openclaw/workspace/projects/gleipnir/README.md`
+- Notion HQ: `ETHGlobal Open Agents` (`https://www.notion.so/ETHGlobal-Open-Agents-34ccb946bafe814fa3d9ddd541894f0f`)
+
+## Current Capabilities
+
+### Report / API
+
+- `/report/[address]` renders real analysis.
+- `/api/analyze` returns full internal analysis JSON.
+- `/api/v1/check?address=0x...&chain=ethereum` returns agent-friendly JSON.
+- Shared analyzer lives at `src/lib/analyze-contract.ts`.
+- Report includes:
+  - risk score / level
+  - red flags
+  - proxy / implementation info
+  - risk breakdown
+  - control surface card
+  - privileged function list
+  - source stats
+
+### Parser / Permission Extractor
+
 File: `src/lib/permission-extractor.ts`
 
-Capabilities now included:
-- Parses Solidity `function`, `constructor`, `fallback`, and `receive` declarations.
+Capabilities:
+
+- Parses Solidity `function`, `constructor`, `fallback`, `receive`.
 - Handles multi-line signatures.
-- Extracts function name, signature, params, return values, visibility, mutability, and line number.
-- Detects access control from:
-  - Modifiers: `onlyOwner`, `onlyRole`, `onlyAdmin`, custom `only*`, `requires*`, auth/role/owner/admin-style modifiers.
-  - Body checks: `require(msg.sender == owner)`, `_msgSender()`, `tx.origin`, `hasRole(...)`, `authorized[msg.sender]`, `if (...) revert` patterns.
-  - Dangerous internals: `delegatecall`, low-level `.call`, `.staticcall`, `.callcode`, inline `assembly`.
-- Categorizes permissioned functions into:
-  - `funds`
-  - `parameters`
-  - `permissions`
-  - `pausability`
-  - `upgradeability`
-  - `other`
-- Adds risk factors:
-  - `unprotected-anyone-callable`
-  - `low-level-call`
-  - `inline-assembly`
-  - `upgrade-path`
-  - `fallback-entrypoint`
-  - `receive-entrypoint`
-  - `mitigated-by-timelock-or-guard`
+- Extracts name, signature, params, returns, visibility, mutability, source line number.
+- Detects access control via:
+  - modifiers (`onlyOwner`, `onlyRole`, custom `only*`, `requires*`, role/admin/auth/owner terms)
+  - body checks (`require(msg.sender == owner)`, `_msgSender()`, `hasRole`, `authorized[msg.sender]`, `if (...) revert`)
+  - dangerous internals (`delegatecall`, low-level call/staticcall/callcode, inline assembly)
+- Tracks Solidity scope kind:
+  - `contract`
+  - `abstract contract`
+  - `interface`
+  - `library`
+- Filters out declaration-only interface/abstract API functions.
+- Filters out library helpers as direct user-callable contract surface.
+- Reads inheritance and filters analysis to the target contract plus inherited base contracts.
+- Adds `accessType` metadata:
+  - `protected`
+  - `unprotected`
+  - `dangerous-internal`
+- Adds `sourceContract` metadata.
+
+### ERC/User-Flow Exclusions
+
+Standard token user operations are excluded so Gleipnir does not confuse user authorization with admin control.
+
+Excluded unless explicitly privileged:
+
+- ERC-20: `transfer`, `transferFrom`, `approve`, allowance helpers, `permit`
+- ERC-721: `safeTransferFrom`, `setApprovalForAll`
+- ERC-1155: `safeTransferFrom`, `safeBatchTransferFrom`
+
+If a standard-shaped function has an explicit privileged modifier like `onlyOwner`, it remains visible.
 
 ### Risk Engine
+
 File: `src/lib/risk-engine.ts`
 
-Added:
-- Scoring increases for unprotected critical functions.
-- Scoring increases for low-level calls / inline assembly.
-- Slight scoring reduction for guard/timelock-style mitigations.
-- Red flags for:
-  - `Unprotected critical function`
-  - `Dangerous low-level execution path`
+Capabilities:
 
-### Types
-File: `src/lib/types.ts`
+- Scores privileged function categories, proxy risk, ownership placeholders, timelock placeholders, dangerous internals.
+- Caps normal controlled admin surface below confirmed exploit-style critical paths.
+- Red flags include:
+  - upgradeable proxy detected
+  - privileged upgrade path
+  - privileged fund-moving function
+  - permissions can be changed
+  - unprotected critical function
+  - dangerous low-level execution path
+  - privileged economic parameter changes
+  - no explicit privileged functions extracted
 
-Extended `PermissionedFunction` with:
-- `lineNumber?: number`
-- `parameters?: string[]`
-- `returnValues?: string[]`
-- `accessControl?: string[]`
-- `riskFactors?: string[]`
+### Ownership MVP
 
-### Tests
-File: `tests/permission-extractor.test.ts`
+File: `src/lib/ownership-resolver.ts`
 
-Coverage includes:
-- OpenZeppelin-style `AccessControl`
-- `onlyOwner`
-- `onlyRole(DEFAULT_ADMIN_ROLE)`
-- multi-line signatures
-- body `require` authorization
-- low-level call detection
-- `delegatecall`
-- inline `assembly`
-- fallback handling
-- risk engine red flags
+Capabilities:
+
+- Reads EIP-1967 proxy admin slot when available.
+- Tries generic `owner()`, `admin()`, `governance()`.
+- Classifies:
+  - EOA
+  - Safe / multisig via `getOwners()` + `getThreshold()`
+  - Timelock via `getMinDelay()` / `delay()`
+  - Governor via `votingPeriod()`
+  - UnknownContract
+
+Known limitation:
+
+- Aave ownership remains unresolved by generic MVP resolver because Aave uses protocol-specific ACL / configurator indirection. Phase 2 needs Aave-style graph tracing: `Pool -> ADDRESSES_PROVIDER -> ACLManager / PoolConfigurator / governance / timelock`.
+
+### Cache
+
+- 5-minute in-memory analysis cache keyed by `chain:address`.
+- Coalesces concurrent in-flight requests.
+- Successful analysis results are cached; failures are not.
 
 ## Verification Passed
-Commands run from `/root/.openclaw/workspace/projects/gleipnir`:
+
+From `/root/.openclaw/workspace/projects/gleipnir`:
 
 ```bash
-node --experimental-strip-types --test tests/permission-extractor.test.ts
-npx tsc --noEmit
 npm run lint
+npx tsc --noEmit
+node --experimental-strip-types --test tests/permission-extractor.test.ts
 npm run build
 ```
 
-All passed.
+Latest parser test suite: 6 tests.
+
+Aave smoke after Phase 1.6:
+
+- Contract: `PoolInstance`
+- Score: `63 / HIGH`
+- Functions: `17`
+- No ERC noise.
+- No `execute*` helper noise.
+- Cache smoke: repeated calls returned same `analysisTimestamp`.
+- Ownership: unresolved for Aave until Phase 2 protocol-specific tracing.
 
 Build warning only:
-- Next.js inferred workspace root due to multiple lockfiles:
+
+- Next.js infers workspace root due to multiple lockfiles:
   - `/root/.openclaw/workspace/package-lock.json`
   - `/root/.openclaw/workspace/projects/gleipnir/package-lock.json`
 - Build succeeds despite warning.
 
-## Current Git State Notes
-Uncommitted work exists. Do not assume every change is from the latest parser task.
+## Critical Context From Testing Feedback
 
-Observed `git status --short`:
+Trav is starting a new session and has additional testing feedback before Phase 2. Wait for that feedback before implementing Phase 2.
 
-```text
- M app/layout.tsx
- M app/page.tsx
- M eslint.config.mjs
- D src/app/api/analyze/route.ts
- D src/app/api/v1/check/route.ts
- D src/app/page.tsx
- D src/app/report/[address]/page.tsx
- M src/lib/blockscout.ts
- M src/lib/types.ts
- M tsconfig.json
-?? app/api/
-?? app/report/
-?? src/lib/permission-extractor.ts
-?? src/lib/risk-engine.ts
-?? tests/
-```
+Previously discussed review priorities:
 
-Important: Some app-router migration files and layout/page changes already existed before the parser implementation. Review before committing if a clean commit is needed.
+1. ERC false positives — addressed in Phase 1.6.
+2. Ownership chain — MVP added, but real Phase 2 is protocol-specific graph tracing.
+3. Caching — addressed in Phase 1.6.
+4. Claude explanations — not yet implemented. Use Claude as narrator, not source of truth.
+5. OpenGraph metadata / image — not yet implemented.
+6. SearchBar inline error instead of `alert()` — not yet implemented.
+7. Landing copy stale “five days ago” — not yet implemented.
+8. Share/copy URL button — not yet implemented.
+9. Test against 10+ real contracts — pending.
 
-## Recommended Next Steps
-1. Review uncommitted app-router changes and decide whether to commit as one hackathon checkpoint or split into logical commits.
-2. Add an AST/import-resolution fallback later for inheritance/import-heavy contracts.
-3. Add more fixtures:
-   - UUPS `_authorizeUpgrade`
-   - Transparent proxy admin patterns
-   - TimelockController ownership
-   - multisig/governance owner labels
-   - dynamic role names
-   - inherited modifiers
-4. Consider adding a small script/test command in `package.json` for the node test runner.
-5. Silence Next.js workspace-root warning via `next.config.ts` `turbopack.root` if desired.
+## Recommended Next Step
+
+Do **not** start coding blindly. First consume Trav’s new testing feedback.
+
+Then likely Phase 2:
+
+1. Protocol-specific ownership/control graph resolver.
+2. Aave tracing first:
+   - Pool proxy
+   - implementation
+   - `ADDRESSES_PROVIDER`
+   - `PoolConfigurator`
+   - `ACLManager`
+   - role admins / governance / timelock
+3. Display an accurate “Ultimate control” narrative in the report.
+4. Add regression tests or fixtures for Aave-style architecture.
 
 ## One-Line Status
-Gleipnir now has a deterministic Solidity permission extractor with fixture tests and successful typecheck/lint/build; remaining work is AST/import depth, ownership-chain intelligence, and commit hygiene.
+
+Gleipnir Phase 1.6 is shipped: accurate target-contract permission filtering, ERC user-flow exclusions, cache, and generic ownership MVP are live; next is testing feedback + Phase 2 control-graph tracing.

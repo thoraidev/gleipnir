@@ -184,6 +184,200 @@ Coverage includes:
 
 Moved app routes from `src/app` to top-level `app` and removed duplicate old route/page files.
 
+### 2026-04-28 — Railway deploy fix and Gleipnir-specific build log
+
+Commit: `0b84d1c` — `Fix Railway Node version and add build log`
+
+Fixed the Railway/Nixpacks production build failure.
+
+Root cause:
+
+- Railway/Nixpacks defaults Node to 18 unless told otherwise.
+- Gleipnir uses Next.js 16.2.4, which requires Node `>=20.9.0`.
+
+Changes:
+
+- Added `engines.node = "22.x"` to `package.json` and `package-lock.json`.
+- Added this dedicated `BUILD_LOG.md` for the ETHGlobal/Open Agents Gleipnir build.
+- Linked the build log from `README.md`.
+
+Verification:
+
+- Local clean builds passed after the Node version pin.
+- GitHub/Railway are now aligned on Node 22.
+
+### 2026-04-28 — Phase 1: report page wired to analyzer
+
+Commit: `8b8f580` — `Wire report page to Gleipnir analyzer`
+
+The deployed report page moved from placeholder copy to live analysis.
+
+Built:
+
+- Shared analyzer module: `src/lib/analyze-contract.ts`
+- `/api/analyze` now calls shared analyzer logic.
+- `/api/v1/check` now calls shared analyzer directly instead of self-fetching via `NEXT_PUBLIC_BASE_URL`.
+- `/report/[address]` renders real report data:
+  - risk score and risk level
+  - red flags
+  - proxy / implementation status
+  - risk breakdown
+  - privileged function list
+  - source stats
+- Added report loading skeleton: `app/report/[address]/loading.tsx`.
+
+Smoke result before false-positive cleanup:
+
+- Aave Pool resolved as `PoolInstance`.
+- Analyzer returned `92 / CRITICAL`, `111` privileged functions, and `7` red flags.
+- This proved the UI/API wiring worked, but also exposed major false-positive noise from flattened verified source.
+
+### 2026-04-28 — False-positive cleanup: interfaces and libraries
+
+Commit: `285eda8` — `Reduce false positives in permission analyzer`
+
+Trav noticed the report claimed impossible Aave issues like “anyone can call addPoolAdmin.” This exposed that the parser was treating bundled interfaces and library helpers as direct live contract surfaces.
+
+Fixes:
+
+- Parser now tracks Solidity scopes:
+  - `contract`
+  - `abstract contract`
+  - `interface`
+  - `library`
+- Skips declaration-only functions from interfaces/abstract APIs.
+- Skips library helper functions as direct user-callable contract surface.
+- Stops treating harmless read-only declarations / role getters as privileged functions.
+- Narrows unprotected sensitive-name detection to admin/governance/upgrade/rescue/freeze/oracle/fee-style names.
+- Calibrates risk scoring so a large controlled admin surface is not scored like confirmed anyone-callable critical paths.
+
+Verification / Aave smoke:
+
+- Aave dropped from `111` functions to `17` relevant protected functions.
+- Bogus “73 critical functions callable by anyone” warning disappeared.
+- Remaining warnings became credible: upgradeable proxy, privileged fund-moving function, privileged economic parameter changes.
+
+### 2026-04-28 — Phase 1.5: target-contract filtering and clearer access metadata
+
+Commit: `d6bdb61` — `Harden Phase 1.5 permission analysis`
+
+Turned the quick false-positive cleanup into stronger target-aware analysis.
+
+Built:
+
+- Analyzer accepts `targetContractName`.
+- Parser reads Solidity inheritance (`contract Target is BaseA, BaseB`).
+- Analysis filters to the target implementation contract plus inherited base contracts.
+- Added `accessType` metadata:
+  - `protected`
+  - `unprotected`
+  - `dangerous-internal`
+- Added `sourceContract` metadata for each permissioned function.
+- Report UI now says `Access: protected by ...` and shows `Source: ...` instead of only `Caller`.
+- Added tests for target-contract inheritance filtering.
+
+Verification / Aave smoke:
+
+- `PoolInstance`
+- `63 / HIGH`
+- `17` functions
+- no `execute*` helper noise
+- no interface role getter noise
+- all listed Aave functions are protected
+- source contract is `Pool`
+
+### 2026-04-28 — Phase 1.6: ERC user-flow exclusions, cache, ownership MVP
+
+Commit: `8c3779b` — `Implement Phase 1.6 analysis hardening`
+
+Addressed testing feedback before moving to Phase 2.
+
+#### ERC/user-operation exclusion
+
+Added explicit exclusions for standard ERC user authorization flows so Gleipnir does not confuse token-user permissions with protocol-admin permissions.
+
+Excluded standard user functions:
+
+- ERC-20: `transfer`, `transferFrom`, `approve`, allowance helpers, `permit`
+- ERC-721: `safeTransferFrom`, `setApprovalForAll`
+- ERC-1155: `safeTransferFrom`, `safeBatchTransferFrom`
+
+Important nuance:
+
+- ERC-shaped functions stay visible if the project adds explicit privileged modifiers such as `onlyOwner`.
+
+#### Tests
+
+Added parser tests for:
+
+- ERC-20 user flows
+- ERC-721 user flows
+- ERC-1155 user flows
+- non-standard privileged ERC-shaped functions remaining visible
+
+Test suite now has 6 parser/risk tests.
+
+#### Cache
+
+Added a 5-minute in-memory analysis cache keyed by `chain:address`.
+
+Behavior:
+
+- caches successful analysis results
+- coalesces concurrent in-flight analysis promises
+- avoids repeat Blockscout/Etherscan/RPC calls during demos and refreshes
+
+#### Ownership-chain MVP
+
+Added `src/lib/ownership-resolver.ts`.
+
+Capabilities:
+
+- reads EIP-1967 proxy admin slot when available
+- tries generic `owner()`, `admin()`, and `governance()`
+- classifies:
+  - EOA
+  - Gnosis Safe / multisig via `getOwners()` + `getThreshold()`
+  - Timelock via `getMinDelay()` / `delay()`
+  - Governor via `votingPeriod()`
+  - unknown contract
+- Report UI now includes a `Control surface` card.
+
+Known limitation:
+
+- Aave ownership remains unresolved by this MVP because Aave uses protocol-specific ACL / configurator indirection rather than a simple generic `owner()` or proxy-admin path. Phase 2 should trace Aave-style `ADDRESSES_PROVIDER`, `ACLManager`, `PoolConfigurator`, proxy admin, and timelock/governance contracts.
+
+Verification / Aave smoke:
+
+- `PoolInstance`
+- `63 / HIGH`
+- `17` functions
+- no ERC noise
+- no `execute*` helper noise
+- cache confirmed by repeated calls returning the same `analysisTimestamp`
+
+### 2026-04-29 — Handoff before new testing-feedback session
+
+No code changes in this entry. Saved state for a new session before Phase 2.
+
+Current branch state:
+
+- `main` is synced with `origin/main` at `8c3779b`.
+- Railway should be deploying from `8c3779b` or newer.
+
+Current known priorities from review feedback:
+
+1. Consume Trav’s new testing feedback before Phase 2.
+2. Phase 2: protocol-specific ownership/control graph resolution.
+   - Aave-style `Pool -> AddressesProvider / ACLManager / PoolConfigurator / governance` tracing.
+   - Safe/timelock/governor labels in the report.
+3. Improve plain-English descriptions with Claude as narrator, not source of truth.
+4. Add OpenGraph metadata / image for shareable report links.
+5. Polish search UX: replace `alert()` with inline error.
+6. Add share/copy URL button.
+7. Update landing copy to avoid stale “five days ago” wording.
+8. Test against 10+ real contracts and record remaining false positives.
+
 ## Verified Gates
 
 Run from `/root/.openclaw/workspace/projects/gleipnir` on 2026-04-27:
