@@ -14,27 +14,31 @@ const SELECTORS = {
   votingPeriod: '0x02a251a3',
 };
 
-function rpcUrl(chain: SupportedChain): string {
-  if (chain === 'base') {
-    return process.env.BASE_RPC_URL || 'https://base.llamarpc.com';
-  }
-  return process.env.ALCHEMY_RPC_URL || 'https://eth.llamarpc.com';
+function rpcUrls(chain: SupportedChain): string[] {
+  const urls = chain === 'base'
+    ? [process.env.BASE_RPC_URL, 'https://base.publicnode.com', 'https://base.llamarpc.com']
+    : [process.env.ALCHEMY_RPC_URL, 'https://ethereum.publicnode.com', 'https://eth.llamarpc.com'];
+  return Array.from(new Set(urls.filter((url): url is string => Boolean(url))));
 }
 
 async function rpcCall<T>(chain: SupportedChain, method: string, params: unknown[]): Promise<T | null> {
-  try {
-    const res = await fetch(rpcUrl(chain), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data.error) return null;
-    return data.result ?? null;
-  } catch {
-    return null;
+  for (const url of rpcUrls(chain)) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.error) continue;
+      return data.result ?? null;
+    } catch {
+      continue;
+    }
   }
+
+  return null;
 }
 
 async function ethCall(chain: SupportedChain, to: string, data: string): Promise<string | null> {
@@ -101,13 +105,12 @@ async function classifyOwner(chain: SupportedChain, address: string, label?: str
     return { address, type: 'EOA', label };
   }
 
-  const [ownersResult, threshold, minDelay, legacyDelay, votingPeriod] = await Promise.all([
-    ethCall(chain, address, SELECTORS.getOwners).then(decodeAddressArray),
-    readUintFunction(chain, address, SELECTORS.getThreshold),
-    readUintFunction(chain, address, SELECTORS.getMinDelay),
-    readUintFunction(chain, address, SELECTORS.delay),
-    readUintFunction(chain, address, SELECTORS.votingPeriod),
-  ]);
+  // Keep these probes serialized. Public RPCs and demo RPC tiers are much more reliable
+  // with a few deliberate calls than a burst of unrelated interface probes.
+  const ownersResult = decodeAddressArray(await ethCall(chain, address, SELECTORS.getOwners));
+  const threshold = ownersResult?.length
+    ? await readUintFunction(chain, address, SELECTORS.getThreshold)
+    : undefined;
 
   if (ownersResult?.length && threshold) {
     return {
@@ -120,6 +123,10 @@ async function classifyOwner(chain: SupportedChain, address: string, label?: str
     };
   }
 
+  const minDelay = await readUintFunction(chain, address, SELECTORS.getMinDelay);
+  const legacyDelay = typeof minDelay === 'number'
+    ? undefined
+    : await readUintFunction(chain, address, SELECTORS.delay);
   const delay = minDelay ?? legacyDelay;
   if (typeof delay === 'number') {
     return {
@@ -130,6 +137,7 @@ async function classifyOwner(chain: SupportedChain, address: string, label?: str
     };
   }
 
+  const votingPeriod = await readUintFunction(chain, address, SELECTORS.votingPeriod);
   if (typeof votingPeriod === 'number') {
     return {
       address,
@@ -142,8 +150,29 @@ async function classifyOwner(chain: SupportedChain, address: string, label?: str
   return { address, type: 'UnknownContract', label };
 }
 
+async function readControllerAddress(
+  chain: SupportedChain,
+  address: string
+): Promise<{ address: string; label: string } | null> {
+  const candidates = [
+    { selector: SELECTORS.owner, label: 'owner()' },
+    { selector: SELECTORS.admin, label: 'admin()' },
+    { selector: SELECTORS.governance, label: 'governance()' },
+  ];
+
+  for (const candidate of candidates) {
+    const controller = await readAddressFunction(chain, address, candidate.selector);
+    if (controller) return { address: controller, label: candidate.label };
+  }
+
+  return null;
+}
+
 function describeOwner(owner: OwnerInfo): string {
   const short = `${owner.address.slice(0, 6)}…${owner.address.slice(-4)}`;
+  if (owner.type === 'ProxyAdmin') {
+    return `ProxyAdmin contract ${short}`;
+  }
   if (owner.type === 'GnosisSafe') {
     return `${owner.threshold}/${owner.signerCount} multisig (${short})`;
   }
@@ -188,10 +217,43 @@ export async function resolveOwnershipChain(
   if (!directOwnerAddress) return null;
 
   const directOwner = await classifyOwner(chain, directOwnerAddress, directOwnerLabel);
+  const chainOwners: OwnerInfo[] = [directOwner];
+
+  // EIP-1967 Transparent proxies commonly point at an OpenZeppelin ProxyAdmin contract.
+  // The ProxyAdmin itself is not the ultimate controller; its owner() usually points to
+  // a Safe, timelock, governor, or EOA. Resolve exactly one generic hop deeper so reports
+  // say "ProxyAdmin -> Safe/timelock" instead of stopping at UnknownContract.
+  const shouldProbeController = directOwner.type !== 'EOA';
+  if (shouldProbeController) {
+    const controller = await readControllerAddress(chain, directOwnerAddress);
+    const controllerAddress = normalizeAddress(controller?.address);
+    if (
+      controller &&
+      controllerAddress &&
+      controllerAddress !== directOwnerAddress &&
+      controllerAddress !== normalizedContract
+    ) {
+      if (directOwnerLabel === 'Proxy admin' && directOwner.type === 'UnknownContract') {
+        directOwner.type = 'ProxyAdmin';
+        directOwner.label = `Proxy admin; controller via ${controller.label}`;
+      }
+
+      const controllerOwner = await classifyOwner(
+        chain,
+        controllerAddress,
+        `${directOwnerLabel ?? 'controller'} ${controller.label}`
+      );
+      chainOwners.push(controllerOwner);
+    }
+  }
+
+  const ultimate = chainOwners[chainOwners.length - 1];
   return {
     contract: normalizedContract,
     directOwner,
-    chain: [directOwner],
-    ultimateControl: describeOwner(directOwner),
+    chain: chainOwners,
+    ultimateControl: chainOwners.length > 1
+      ? `${describeOwner(directOwner)} → ${describeOwner(ultimate)}`
+      : describeOwner(directOwner),
   };
 }

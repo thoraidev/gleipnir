@@ -380,6 +380,65 @@ Current known priorities from review feedback:
 7. Update landing copy to avoid stale “five days ago” wording.
 8. Test against 10+ real contracts and record remaining false positives.
 
+### 2026-04-29 — Phase 1.7 demo-readiness: rsETH, USDC, Lido fixes
+
+Testing feedback focused on demo credibility across rsETH, USDC, Lido, Aave, ENS, and Uniswap.
+
+Implemented:
+
+- Ownership resolver now follows one generic hop past a resolved proxy admin.
+  - Detects OpenZeppelin-style `ProxyAdmin -> owner()`.
+  - Classifies the owner as Safe, Timelock, Governor, EOA, or UnknownContract.
+  - Uses serialized RPC probes and fallback public RPC URLs to avoid demo-time rate-limit failures.
+- Proxy resolver now retries EIP-1967 slot reads across multiple RPC endpoints.
+- Report UI now renders the resolved control chain, not just the first owner.
+- Added Claude-backed plain-English descriptions for the top 5 functions per report when `ANTHROPIC_API_KEY` is present.
+  - Deterministic descriptions remain the fallback and source of truth.
+  - Claude is narration only: it cannot change extracted facts, callers, categories, or risk factors.
+- Improved deterministic descriptions for mint, burn, freeze/blacklist, unfreeze/unblacklist, minter configuration, rescue/recovery, pause/unpause, ownership changes, upgrades, and economic parameters.
+- Fixed Lido false positives:
+  - Detects Aragon-style access checks (`auth`, `authP`, `_auth`, `canPerform`, `hasPermission`, etc.).
+  - Detects one-time initializer / upgrade-finalization guards, including Lido-style `_checkContractVersion()` / `_setContractVersion()`.
+  - Skips read-only permission-check helpers like Aragon `canPerform(...)` as direct privileged surfaces.
+
+Added tests:
+
+- Aragon-style auth detection.
+- Initializer / upgrade-finalization guard detection.
+
+Verification:
+
+```bash
+npm run lint
+npx tsc --noEmit
+node --experimental-strip-types --test tests/permission-extractor.test.ts
+npm run build
+```
+
+All passed. Test suite now has 7 tests.
+
+Smoke results from local production server:
+
+- rsETH (`0xA1290d69c65A6Fe4DF752f95823fae25cB99e5A7`)
+  - `RSETH`, `67 / HIGH`
+  - Control resolved: `ProxyAdmin 0xb61e…dc78 -> Timelock 0x49bd…35b1`
+  - Timelock delay: `864000s` = 10 days
+  - Top descriptions now specifically identify freeze, mint, burn, pause, and frozen-fund recovery behavior.
+- USDC (`0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`)
+  - `FiatTokenV2_2`, `67 / HIGH`
+  - Correctly shows centralized/permissioned pattern: blacklist, mint, burn, pause, minter configuration, rescue, ownership transfer.
+  - No ERC transfer/approve false-positive noise.
+- Lido (`0xae7ab96520de3a18e5e111b5eaab095312d7fe84`)
+  - Dropped from `82 / CRITICAL` to `67 / HIGH`.
+  - `pauseStaking` is now protected by `STAKING_PAUSE_ROLE`.
+  - `finalizeUpgrade_v3` is now treated as a one-time upgrade-finalization flow, not an anyone-callable critical function.
+
+Remaining known work:
+
+- Lido still scores HIGH because the deterministic engine sees a large fund/permission/upgrade surface. Further calibration can distinguish operational accounting/vault hooks from governance/admin powers.
+- USDC owner resolution currently reports the implementation-level `owner()` EOA. Further work should distinguish proxy admin control from implementation owner control for non-EIP-1967 proxy patterns.
+- Aave still needs protocol-specific ACL graph tracing.
+
 ## Verified Gates
 
 Run from `/root/.openclaw/workspace/projects/gleipnir` on 2026-04-27:

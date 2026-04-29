@@ -8,23 +8,34 @@ const BEACON_SLOT =
   '0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50';
 
 async function readStorageSlot(address: string, slot: string): Promise<string> {
-  const rpcUrl = process.env.ALCHEMY_RPC_URL || 'https://eth.llamarpc.com';
-  try {
-    const res = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        id: 1,
-        method: 'eth_getStorageAt',
-        params: [address, slot, 'latest'],
-      }),
-    });
-    const data = await res.json();
-    return data.result || '0x';
-  } catch {
-    return '0x';
+  const rpcUrls = Array.from(new Set([
+    process.env.ALCHEMY_RPC_URL,
+    'https://ethereum.publicnode.com',
+    'https://eth.llamarpc.com',
+  ].filter((url): url is string => Boolean(url))));
+
+  for (const rpcUrl of rpcUrls) {
+    try {
+      const res = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'eth_getStorageAt',
+          params: [address, slot, 'latest'],
+        }),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.error) continue;
+      return data.result || '0x';
+    } catch {
+      continue;
+    }
   }
+
+  return '0x';
 }
 
 function slotToAddress(slot: string): string | null {

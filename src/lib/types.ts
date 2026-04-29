@@ -34,7 +34,7 @@ export interface PermissionedFunction {
   plainEnglish?: string;
 }
 
-export type OwnerType = 'EOA' | 'GnosisSafe' | 'Timelock' | 'Governor' | 'UnknownContract';
+export type OwnerType = 'EOA' | 'ProxyAdmin' | 'GnosisSafe' | 'Timelock' | 'Governor' | 'UnknownContract';
 
 export interface OwnerInfo {
   address: string;

@@ -265,3 +265,36 @@ contract WeirdToken {
   assert.equal(functions[0]?.functionName, 'transferFrom');
   assert.equal(functions[0]?.roleOrAddress, 'owner');
 });
+
+test('detects Aragon-style auth calls and initializer guards', () => {
+  const source = `
+contract LidoLike {
+  bool internal initialized;
+  bytes32 public constant STAKING_PAUSE_ROLE = keccak256("STAKING_PAUSE_ROLE");
+
+  modifier auth(bytes32 role) { role; _; }
+
+  function finalizeUpgrade_v3(address locator, address[] calldata operators, uint256 version) external {
+    require(!initialized, "already initialized");
+    initialized = true;
+    locator; operators; version;
+  }
+
+  function pauseStaking() external auth(STAKING_PAUSE_ROLE) {
+  }
+
+  function resumeStaking() external {
+    _auth(STAKING_PAUSE_ROLE);
+  }
+}
+`;
+
+  const functions = extractPermissionedFunctions(source, { targetContractName: 'LidoLike' });
+  const byName = new Map(functions.map((fn) => [fn.functionName, fn]));
+
+  assert.equal(byName.get('finalizeUpgrade_v3')?.roleOrAddress, 'one-time initializer guard');
+  assert.ok(byName.get('finalizeUpgrade_v3')?.riskFactors?.includes('one-time-initializer'));
+  assert.ok(!byName.get('finalizeUpgrade_v3')?.riskFactors?.includes('unprotected-anyone-callable'));
+  assert.equal(byName.get('pauseStaking')?.roleOrAddress, 'STAKING_PAUSE_ROLE');
+  assert.equal(byName.get('resumeStaking')?.roleOrAddress, 'STAKING_PAUSE_ROLE');
+});

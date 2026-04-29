@@ -37,6 +37,11 @@ const ASSEMBLY_RE = /\bassembly\s*\{/i;
 const MODERATING_MODIFIER_RE = /\b(nonReentrant|whenNotPaused|whenPaused|rateLimit(?:ed)?|timelock(?:ed)?|onlyTimelock|delay(?:ed)?)\b/i;
 const EXPLICIT_PRIVILEGED_MODIFIER_RE =
   /^(only|requires?)(Owner|Admin|Role|Govern|Guardian|Manager|Operator|Controller|Authority|Auth|Timelock|PoolConfigurator|PoolAdmin|Emergency|Risk|Bridge|Umbrella)/;
+const ACCESS_CALL_RE = /\b(?:auth|authP|canPerform|hasPermission|requirePermission|_checkRole|_requireAuth|_auth)\s*\([^;{}]*\)/gi;
+const INITIALIZER_NAME_RE = /^(initialize|initializeV\d+|reinitialize|finalizeUpgrade(?:_v?\d+)?)$/i;
+const INITIALIZER_MODIFIER_RE = /\b(initializer|reinitializer|onlyInit|initOnce|onlyInitializing)\b/i;
+const INITIALIZER_GUARD_RE =
+  /(!\s*(?:initialized|isInitialized|_initialized)|(?:initialized|isInitialized|_initialized)\s*==\s*false|hasInitialized\s*\(\s*\)|_checkContractVersion\s*\(|_setContractVersion\s*\(|(?:initialized|_initialized|initializedVersion|lastInitializedRevision|getInitializationBlock\s*\(\s*\))\s*(?:<|==|!=)\s*\d+|_setInitializedVersion\s*\(|_disableInitializers\s*\(|onlyInit)/i;
 
 const ERC_STANDARD_USER_SIGNATURES = new Set([
   // ERC-20 user operations
@@ -387,6 +392,7 @@ function inferRoleFromModifier(modifier: string): string {
     onlyRole: 'role',
     requiresAuth: 'authorized account',
     auth: 'authorized account',
+    authP: 'authorized account',
   };
   return known[modifier] ?? modifier;
 }
@@ -420,6 +426,9 @@ function extractRequireArguments(body: string): string[] {
 }
 
 function roleFromExpression(expression: string): string | undefined {
+  const authCall = expression.match(/\b(?:auth|authP|canPerform|hasPermission|requirePermission|_checkRole|_requireAuth|_auth)\s*\(\s*([A-Za-z0-9_$.]+)/i);
+  if (authCall) return authCall[1];
+
   const hasRole = expression.match(/hasRole\s*\(\s*([A-Za-z0-9_$.]+)\s*,\s*(?:msg\.sender|_msgSender\(\))/);
   if (hasRole) return hasRole[1];
 
@@ -450,13 +459,20 @@ function roleFromExpression(expression: string): string | undefined {
 }
 
 function isPermissionExpression(expression: string): boolean {
-  return /msg\.sender|_msgSender\(\)|tx\.origin|hasRole\s*\(|onlyRole\s*\(|AccessControl|owner\s*\(\)|\badmin\b|\bguardian\b|\bgovern|authorized\s*\[|isAuthorized|\bauth\b/i.test(
+  return /msg\.sender|_msgSender\(\)|tx\.origin|hasRole\s*\(|onlyRole\s*\(|AccessControl|owner\s*\(\)|\badmin\b|\bguardian\b|\bgovern|authorized\s*\[|isAuthorized|\bauth\b|authP\s*\(|canPerform\s*\(|hasPermission\s*\(|requirePermission\s*\(|_checkRole\s*\(|_requireAuth\s*\(|_auth\s*\(/i.test(
     expression
   );
 }
 
 function extractBodyEvidence(body: string): PermissionEvidence[] {
-  return extractRequireArguments(body)
+  const expressions = extractRequireArguments(body);
+  let match: RegExpExecArray | null;
+  ACCESS_CALL_RE.lastIndex = 0;
+  while ((match = ACCESS_CALL_RE.exec(body)) !== null) {
+    expressions.push(match[0]);
+  }
+
+  return expressions
     .filter(isPermissionExpression)
     .map((expression) => ({
       source: 'require' as const,
@@ -464,6 +480,20 @@ function extractBodyEvidence(body: string): PermissionEvidence[] {
       roleOrAddress: roleFromExpression(expression) ?? 'restricted caller',
       expression: expression.replace(/\s+/g, ' ').slice(0, 180),
     }));
+}
+
+function extractInitializerEvidence(fn: ParsedFunction): PermissionEvidence[] {
+  if (!INITIALIZER_NAME_RE.test(fn.name) && !INITIALIZER_MODIFIER_RE.test(fn.headerTail)) return [];
+  if (!INITIALIZER_MODIFIER_RE.test(fn.headerTail) && !INITIALIZER_GUARD_RE.test(fn.body)) return [];
+
+  return [
+    {
+      source: 'body' as const,
+      modifier: INITIALIZER_MODIFIER_RE.test(fn.headerTail) ? 'initializer' : 'initializer-guard',
+      roleOrAddress: 'one-time initializer guard',
+      expression: 'initializer / version guard',
+    },
+  ];
 }
 
 function extractDangerousEvidence(body: string): PermissionEvidence[] {
@@ -502,6 +532,27 @@ function plainEnglishFor(fn: PermissionedFunction): string {
   const actor = fn.accessType === 'unprotected'
     ? 'Any external caller'
     : fn.roleOrAddress || 'a privileged caller';
+  const name = fn.functionName.toLowerCase();
+
+  if (fn.riskFactors?.includes('one-time-initializer')) {
+    return `${actor} can call ${fn.functionName} during a one-time initialization or upgrade-finalization flow; repeated calls are likely blocked by initializer state guards.`;
+  }
+  if (/(configure|add|set).*minter/.test(name)) return `${actor} can authorize or configure minters and their minting limits.`;
+  if (/(remove|revoke).*minter/.test(name)) return `${actor} can remove an address's ability to mint new tokens.`;
+  if (/^mint/.test(name)) return `${actor} can create new tokens, increasing total supply.`;
+  if (/^burnfrom$|^burn/.test(name)) return `${actor} can burn tokens, reducing balances or total supply under the function's rules.`;
+  if (/(recover|rescue).*(frozen|fund|token|asset)|sweep|rescue/.test(name)) return `${actor} can recover or move assets from the contract, including funds affected by freeze or rescue logic.`;
+  if (/(unblock|unfreeze|unblacklist|allow).*(user|account|address|transfer)|^unblacklist$/.test(name)) return `${actor} can remove wallet-level transfer restrictions.`;
+  if (/(block|freeze|blacklist).*(user|account|address|transfer)|blacklist|freeze/.test(name)) return `${actor} can restrict specific wallets, blocking or freezing their ability to transfer.`;
+  if (/(permanent|exempt|whitelist|allowlist)/.test(name)) return `${actor} can add or remove addresses from an exemption or whitelist path.`;
+  if (/^pause/.test(name)) return `${actor} can pause part of the protocol, temporarily stopping affected user actions.`;
+  if (/^unpause/.test(name)) return `${actor} can resume protocol actions after a pause.`;
+  if (/(grantrole|add.*role|set.*role)/.test(name)) return `${actor} can give privileged roles to other addresses.`;
+  if (/(revokerole|remove.*role)/.test(name)) return `${actor} can remove privileged roles from addresses.`;
+  if (/(transferownership|setowner|setadmin|changeadmin)/.test(name)) return `${actor} can change who controls privileged administration.`;
+  if (/(upgrade|implementation|beacon|proxy)/.test(name)) return `${actor} can change contract logic or upgrade routing.`;
+  if (/(fee|rate|oracle|price|limit|threshold|config|configuration)/.test(name)) return `${actor} can change economic or protocol configuration parameters.`;
+
   const categoryCopy: Record<PermissionedFunction['category'], string> = {
     funds: 'move, mint, burn, rescue, or otherwise affect funds',
     parameters: 'change protocol parameters or configuration',
@@ -537,6 +588,9 @@ function riskFactorsFor(fn: ParsedFunction, evidence: PermissionEvidence[], cate
   if (EXTERNAL_CALL_RE.test(fn.body)) factors.push('low-level-call');
   if (ASSEMBLY_RE.test(fn.body)) factors.push('inline-assembly');
   if (category === 'upgradeability') factors.push('upgrade-path');
+  if (evidence.some((item) => item.modifier === 'initializer' || item.modifier === 'initializer-guard')) {
+    factors.push('one-time-initializer');
+  }
   if (fn.kind === 'fallback' || fn.kind === 'receive') factors.push(`${fn.kind}-entrypoint`);
   return factors;
 }
@@ -551,6 +605,7 @@ export function extractPermissionedFunctions(sourceCode: string, options: Extrac
     const accessEvidence = dedupeEvidence([
       ...extractModifierEvidence(fn.headerTail),
       ...extractBodyEvidence(fn.body),
+      ...extractInitializerEvidence(fn),
     ]);
     const dangerousEvidence = extractDangerousEvidence(fn.body);
     const evidence = dedupeEvidence([...accessEvidence, ...dangerousEvidence]);
@@ -573,6 +628,11 @@ export function extractPermissionedFunctions(sourceCode: string, options: Extrac
     const isReadOnly = mutability === 'view' || mutability === 'pure';
     const signature = functionSignature(fn);
     if (isErcStandardUserOperation(signature, accessEvidence)) continue;
+
+    // Permission-check helpers like Aragon canPerform(...) are read-only views used by other
+    // guards. They are important evidence when called from mutating functions, but they are not
+    // themselves privileged control surfaces.
+    if (isReadOnly) continue;
 
     const shouldInclude =
       accessEvidence.length > 0 ||

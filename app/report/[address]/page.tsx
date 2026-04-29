@@ -210,6 +210,21 @@ function OwnershipCard({ analysis }: { analysis: ContractAnalysis }) {
               <span className="text-gray-200">{owner.delay}s</span>
             </div>
           )}
+          {ownership.chain.length > 1 && (
+            <div className="pt-3">
+              <p className="mb-2 text-xs uppercase tracking-wide text-gray-600">Resolved chain</p>
+              <div className="space-y-1">
+                {ownership.chain.map((item, index) => (
+                  <div key={`${item.address}-${index}`} className="flex justify-between gap-4 text-xs">
+                    <span className="text-gray-500">{index === 0 ? 'Direct control' : `Hop ${index}`}</span>
+                    <span className="text-right text-gray-300">
+                      {item.type} <span className="font-mono">{formatAddress(item.address)}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {owner.label && <p className="pt-2 text-xs text-gray-500">Detected via {owner.label}.</p>}
         </div>
       ) : (

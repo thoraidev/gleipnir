@@ -1,6 +1,7 @@
 import { getContractSourceBlockscout } from './blockscout';
 import { getContractSource } from './etherscan';
 import { extractPermissionedFunctions } from './permission-extractor';
+import { enrichPlainEnglishDescriptions } from './llm-translator';
 import { resolveOwnershipChain } from './ownership-resolver';
 import { resolveProxy } from './proxy-resolver';
 import { buildRedFlags, riskLevel, scorePermissions, summarizePermissions } from './risk-engine';
@@ -102,9 +103,10 @@ async function analyzeContractUncached(
   }
 
   const analysisSource = implementationSource || source;
-  const permissionedFunctions = extractPermissionedFunctions(analysisSource.sourceCode, {
+  let permissionedFunctions = extractPermissionedFunctions(analysisSource.sourceCode, {
     targetContractName: analysisSource.contractName,
   });
+  permissionedFunctions = await enrichPlainEnglishDescriptions(permissionedFunctions);
   const redFlags = buildRedFlags(permissionedFunctions, proxyInfo);
   const { riskScore, riskBreakdown } = scorePermissions(permissionedFunctions, proxyInfo);
   const summary = summarizePermissions(permissionedFunctions, redFlags, riskScore);
