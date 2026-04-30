@@ -61,6 +61,77 @@ function formatAddress(address?: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
+function formatUsd(value?: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'Unknown';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    notation: 'compact',
+    maximumFractionDigits: value >= 1_000_000_000 ? 1 : 2,
+  }).format(value);
+}
+
+function BlastRadiusCard({ analysis }: { analysis: ContractAnalysis }) {
+  const blastRadius = analysis.blastRadius;
+  if (!blastRadius) return null;
+
+  const confidenceLabel = blastRadius.matchConfidence === 'manual-high' ? 'Manual high-confidence match' : 'Name-based match';
+
+  return (
+    <div className="rounded-2xl border border-cyan-500/30 bg-cyan-950/10 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Blast radius</h2>
+          <p className="mt-1 text-xs text-cyan-200/80">Protocol TVL context from DeFiLlama</p>
+        </div>
+        <a
+          href={blastRadius.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 rounded-full border border-cyan-500/30 px-2 py-1 text-[11px] text-cyan-200 hover:border-cyan-300"
+        >
+          Source ↗
+        </a>
+      </div>
+
+      <div className="mt-4 space-y-3 text-sm">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-cyan-300/70">Protocol</p>
+          <p className="mt-1 text-gray-100">
+            {blastRadius.protocolName}
+            {blastRadius.category && <span className="text-gray-500"> · {blastRadius.category}</span>}
+          </p>
+          {blastRadius.role && <p className="mt-1 text-xs text-gray-500">Matched as {blastRadius.role}.</p>}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl border border-gray-800 bg-gray-950/50 p-3">
+            <p className="text-xs text-gray-500">Protocol TVL</p>
+            <p className="mt-1 text-xl font-semibold text-white">{formatUsd(blastRadius.protocolTvlUsd)}</p>
+          </div>
+          <div className="rounded-xl border border-gray-800 bg-gray-950/50 p-3">
+            <p className="text-xs text-gray-500">{blastRadius.chain} TVL</p>
+            <p className="mt-1 text-xl font-semibold text-white">{formatUsd(blastRadius.chainTvlUsd)}</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-cyan-100">
+            {confidenceLabel}
+          </span>
+          <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-0.5 text-gray-300">
+            {blastRadius.chains.length} chain{blastRadius.chains.length === 1 ? '' : 's'} tracked
+          </span>
+        </div>
+
+        <p className="text-xs leading-relaxed text-gray-500">
+          {blastRadius.note}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function RiskMeter({ analysis }: { analysis: ContractAnalysis }) {
   return (
     <div className={`rounded-2xl border bg-gradient-to-br ${riskClass(analysis.riskLevel)} p-[1px]`}>
@@ -386,6 +457,7 @@ export default async function ReportPage({ params, searchParams }: Props) {
         <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <RiskMeter analysis={analysis} />
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-1">
+            <BlastRadiusCard analysis={analysis} />
             <OwnershipCard analysis={analysis} />
             <ProxyCard analysis={analysis} />
             <Breakdown breakdown={analysis.riskBreakdown} />

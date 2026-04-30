@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type {
   AnalysisResult,
+  BlastRadius,
   OwnershipChain,
   PermissionedFunction,
   ProxyInfo,
@@ -30,6 +31,7 @@ interface ReportNarrativeInput {
   riskLevel: AnalysisResult['riskLevel'];
   proxyInfo: ProxyInfo;
   ownershipChain: OwnershipChain | null;
+  blastRadius: BlastRadius | null;
   redFlags: RedFlag[];
   permissionedFunctions: PermissionedFunction[];
 }
@@ -62,6 +64,19 @@ function compactReport(input: ReportNarrativeInput) {
           ultimateControl: input.ownershipChain.ultimateControl,
           directOwner: input.ownershipChain.directOwner,
           chain: input.ownershipChain.chain,
+        }
+      : null,
+    blastRadius: input.blastRadius
+      ? {
+          protocolName: input.blastRadius.protocolName,
+          slug: input.blastRadius.slug,
+          category: input.blastRadius.category,
+          role: input.blastRadius.role,
+          protocolTvlUsd: input.blastRadius.protocolTvlUsd,
+          chainTvlUsd: input.blastRadius.chainTvlUsd,
+          chain: input.blastRadius.chain,
+          matchConfidence: input.blastRadius.matchConfidence,
+          note: input.blastRadius.note,
         }
       : null,
     redFlags: input.redFlags.slice(0, 5).map((flag) => ({
@@ -163,12 +178,12 @@ export async function enrichReportNarrative(input: ReportNarrativeInput): Promis
       max_tokens: 1200,
       temperature: 0,
       system:
-        'You translate deterministic smart-contract permission findings into a concise human report. Never add facts not present in the input. Never change who can call a function, the risk score, categories, or extracted facts. If accessType is protected, do not imply anyone can call it. If a function is an initializer, say it is initialization/upgrade-finalization guarded rather than normal admin power.',
+        'You translate deterministic smart-contract permission findings into a concise human report. Never add facts not present in the input. Never change who can call a function, the risk score, categories, or extracted facts. Blast radius/TVL is DeFiLlama context only, not exact contract-controlled funds. If accessType is protected, do not imply anyone can call it. If a function is an initializer, say it is initialization/upgrade-finalization guarded rather than normal admin power.',
       messages: [
         {
           role: 'user',
           content:
-            'Return ONLY a JSON object shaped as {"summaryParagraph":"...","functions":[{"functionSignature":"...","plainEnglish":"..."}]}. The summaryParagraph must be one paragraph, 3-5 sentences, under 650 characters, plain English, and should explain what matters about the permission surface. For functions, rewrite only the provided topPrivilegedFunctions; keep each plainEnglish sentence under 160 characters and use specific verbs: mint, burn, freeze, recover, whitelist, pause, upgrade, set fees, etc. Input:\n' +
+            'Return ONLY a JSON object shaped as {"summaryParagraph":"...","functions":[{"functionSignature":"...","plainEnglish":"..."}]}. The summaryParagraph must be one paragraph, 3-5 sentences, under 650 characters, plain English, and should explain what matters about the permission surface. If blastRadius is present, you may mention it as protocol TVL context, never as exact funds controlled by this contract. For functions, rewrite only the provided topPrivilegedFunctions; keep each plainEnglish sentence under 160 characters and use specific verbs: mint, burn, freeze, recover, whitelist, pause, upgrade, set fees, etc. Input:\n' +
             JSON.stringify(compactReport(input), null, 2),
         },
       ],

@@ -81,11 +81,28 @@ export interface AdminAction {
   blockNumber: number;
 }
 
+export interface BlastRadius {
+  protocolName: string;
+  slug: string;
+  category?: string;
+  role?: string;
+  protocolTvlUsd: number;
+  chainTvlUsd?: number;
+  chain: string;
+  chains: string[];
+  matchConfidence: 'manual-high' | 'name-medium';
+  source: 'DeFiLlama';
+  sourceUrl: string;
+  updatedAt: number;
+  note: string;
+}
+
 export interface AnalysisResult {
   address: string;
   name: string;
   proxyInfo: ProxyInfo;
   ownershipChain: OwnershipChain | null;
+  blastRadius: BlastRadius | null;
   permissionedFunctions: PermissionedFunction[];
   redFlags: RedFlag[];
   riskScore: number;
@@ -107,6 +124,7 @@ export interface AgentCheckResponse {
   redFlags: Array<{ severity: string; title: string; description: string }>;
   privilegedFunctions: Array<{ name: string; calledBy: string; plainEnglish: string; category: string }>;
   ownershipChain: OwnerInfo[];
+  blastRadius: BlastRadius | null;
   analysisTimestamp: number;
   gleipnirUrl: string;
 }

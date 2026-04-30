@@ -1,4 +1,5 @@
 import { getAddressInfoBlockscout, getContractSourceBlockscout } from './blockscout';
+import { resolveBlastRadius } from './defillama';
 import { getContractSource } from './etherscan';
 import { extractPermissionedFunctions } from './permission-extractor';
 import { enrichReportNarrative } from './llm-translator';
@@ -127,6 +128,7 @@ async function analyzeContractUncached(
     targetContractName: analysisSource.contractName,
   });
   const ownershipChain = await resolveOwnershipChain(normalizedAddress, chain, proxyInfo);
+  const blastRadius = await resolveBlastRadius(normalizedAddress, chain, analysisSource.contractName);
   const redFlags = buildRedFlags(permissionedFunctions, proxyInfo, ownershipChain);
   const { riskScore, riskBreakdown } = scorePermissions(permissionedFunctions, proxyInfo, ownershipChain);
   let summary = summarizePermissions(permissionedFunctions, redFlags, riskScore);
@@ -140,6 +142,7 @@ async function analyzeContractUncached(
       riskLevel: riskLevel(riskScore),
       proxyInfo,
       ownershipChain,
+      blastRadius,
       redFlags,
       permissionedFunctions,
     });
@@ -155,6 +158,7 @@ async function analyzeContractUncached(
     sourceLength: analysisSource.sourceCode.length,
     analysisTimestamp: Date.now(),
     ownershipChain,
+    blastRadius,
     permissionedFunctions,
     redFlags,
     riskScore,

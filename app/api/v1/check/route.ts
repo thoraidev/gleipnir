@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
         category: fn.category,
       })),
       ownershipChain: data.ownershipChain?.chain || [],
+      blastRadius: data.blastRadius,
       analysisTimestamp: data.analysisTimestamp,
       gleipnirUrl: `${baseUrl}/report/${data.address}?chain=${chain}`,
     };
