@@ -135,26 +135,26 @@ function BlastRadiusCard({ analysis }: { analysis: ContractAnalysis }) {
 function RiskMeter({ analysis }: { analysis: ContractAnalysis }) {
   return (
     <div className={`rounded-2xl border bg-gradient-to-br ${riskClass(analysis.riskLevel)} p-[1px]`}>
-      <div className="rounded-2xl bg-gray-950/95 p-6 h-full">
-        <div className="flex items-start justify-between gap-4">
+      <div className="rounded-2xl bg-gray-950/95 p-5">
+        <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm text-gray-400">Permission risk score</p>
-            <div className="mt-2 flex items-end gap-3">
-              <span className="text-6xl font-bold text-white tracking-tight">{analysis.riskScore}</span>
-              <span className="pb-2 text-gray-500">/100</span>
+            <div className="mt-2 flex items-end gap-2">
+              <span className="text-5xl font-bold text-white tracking-tight">{analysis.riskScore}</span>
+              <span className="pb-1.5 text-sm text-gray-500">/100</span>
             </div>
           </div>
           <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${riskClass(analysis.riskLevel)}`}>
             {analysis.riskLevel}
           </div>
         </div>
-        <div className="mt-5 h-3 rounded-full bg-gray-800 overflow-hidden">
+        <div className="mt-4 h-2.5 rounded-full bg-gray-800 overflow-hidden">
           <div
             className={`h-full rounded-full bg-gradient-to-r ${riskClass(analysis.riskLevel)}`}
             style={{ width: `${Math.min(100, Math.max(0, analysis.riskScore))}%` }}
           />
         </div>
-        <p className="mt-4 text-sm text-gray-300 leading-relaxed">{analysis.riskAssessment}</p>
+        <p className="mt-3 text-sm text-gray-300 leading-relaxed">{analysis.riskAssessment}</p>
       </div>
     </div>
   );
@@ -454,9 +454,9 @@ export default async function ReportPage({ params, searchParams }: Props) {
           </div>
         </section>
 
-        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="grid gap-6 lg:grid-cols-[0.75fr_1.25fr] lg:items-start">
           <RiskMeter analysis={analysis} />
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="grid gap-6 sm:grid-cols-2">
             <BlastRadiusCard analysis={analysis} />
             <OwnershipCard analysis={analysis} />
             <ProxyCard analysis={analysis} />
