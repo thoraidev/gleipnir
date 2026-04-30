@@ -397,9 +397,9 @@ export default async function ReportPage({ params, searchParams }: Props) {
 
         <div className="rounded-2xl border border-gray-800 bg-gray-900/30 p-5 text-sm text-gray-400">
           <p>
-            Deterministic MVP analysis. This is not a formal audit. On report pages, Haiku may rewrite
-            extracted findings into clearer human-readable function explanations; it cannot change callers,
-            categories, scores, or extracted facts.
+            Deterministic MVP analysis. This is not a formal audit. On report pages, Haiku may rewrite the
+            top summary paragraph and function explanations for readability; it cannot change callers,
+            categories, scores, red flags, or extracted facts.
           </p>
           <p className="mt-2 font-mono text-xs text-gray-600">
             Source bytes analyzed: {analysis.sourceLength.toLocaleString()} · API status: {analysis._status}

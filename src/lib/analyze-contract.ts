@@ -1,7 +1,7 @@
 import { getAddressInfoBlockscout, getContractSourceBlockscout } from './blockscout';
 import { getContractSource } from './etherscan';
 import { extractPermissionedFunctions } from './permission-extractor';
-import { enrichPlainEnglishDescriptions } from './llm-translator';
+import { enrichReportNarrative } from './llm-translator';
 import { resolveOwnershipChain } from './ownership-resolver';
 import { resolveProxy } from './proxy-resolver';
 import { buildRedFlags, riskLevel, scorePermissions, summarizePermissions } from './risk-engine';
@@ -17,7 +17,7 @@ export interface ContractAnalysis extends AnalysisResult {
 
 export interface AnalyzeContractOptions {
   /**
-   * Human report pages can opt into Haiku narration for friendlier top-function descriptions.
+   * Human report pages can opt into Haiku narration for a friendlier summary and top-function descriptions.
    * Public API routes should leave this false so agents get deterministic, no-LLM output.
    */
   llmDescriptions?: boolean;
@@ -126,13 +126,26 @@ async function analyzeContractUncached(
   let permissionedFunctions = extractPermissionedFunctions(analysisSource.sourceCode, {
     targetContractName: analysisSource.contractName,
   });
-  if (useLlmDescriptions) {
-    permissionedFunctions = await enrichPlainEnglishDescriptions(permissionedFunctions);
-  }
   const ownershipChain = await resolveOwnershipChain(normalizedAddress, chain, proxyInfo);
   const redFlags = buildRedFlags(permissionedFunctions, proxyInfo, ownershipChain);
   const { riskScore, riskBreakdown } = scorePermissions(permissionedFunctions, proxyInfo, ownershipChain);
-  const summary = summarizePermissions(permissionedFunctions, redFlags, riskScore);
+  let summary = summarizePermissions(permissionedFunctions, redFlags, riskScore);
+
+  if (useLlmDescriptions) {
+    const narrative = await enrichReportNarrative({
+      contractName: analysisSource.contractName,
+      deterministicSummary: summary.summary,
+      riskAssessment: summary.riskAssessment,
+      riskScore,
+      riskLevel: riskLevel(riskScore),
+      proxyInfo,
+      ownershipChain,
+      redFlags,
+      permissionedFunctions,
+    });
+    summary = { ...summary, summary: narrative.summary };
+    permissionedFunctions = narrative.permissionedFunctions;
+  }
 
   return {
     address: normalizedAddress,
