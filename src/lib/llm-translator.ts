@@ -10,7 +10,7 @@ import type {
 
 const MAX_LLM_FUNCTIONS = 5;
 // Hard-code Haiku for demo-cost safety. Do not allow Railway/env overrides to
-// accidentally switch public contract analysis to Sonnet or Opus.
+// accidentally switch public report narration to a more expensive model.
 const MODEL = 'claude-haiku-4-5';
 
 interface LlmDescription {

@@ -1,12 +1,34 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
 import { AnalyzeContractError, analyzeContract, normalizeChain } from '@/lib/analyze-contract';
 import { blockscoutUrl } from '@/lib/blockscout';
+import ShareButton from '@/components/ShareButton';
 import type { ContractAnalysis } from '@/lib/analyze-contract';
 import type { PermissionedFunction, RedFlag, RiskBreakdown } from '@/lib/types';
 
 interface Props {
   params: Promise<{ address: string }>;
   searchParams?: Promise<{ chain?: string }>;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { address } = await params;
+  const shortAddress = `${address.slice(0, 6)}…${address.slice(-4)}`;
+
+  return {
+    title: `Gleipnir — ${shortAddress} Permission Report`,
+    description: `Smart contract permission risk analysis for ${address}.`,
+    openGraph: {
+      title: `Gleipnir — ${shortAddress} Permission Report`,
+      description: 'Who controls this contract? Paste any address to reveal privileged functions, ownership paths, and blast-radius context.',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary',
+      title: `Gleipnir — ${shortAddress} Permission Report`,
+      description: 'Who controls this contract? Paste any address to reveal privileged functions, ownership paths, and blast-radius context.',
+    },
+  };
 }
 
 function severityClass(severity: RedFlag['severity']) {
@@ -443,14 +465,17 @@ export default async function ReportPage({ params, searchParams }: Props) {
               <h1 className="mt-2 text-3xl md:text-4xl font-bold tracking-tight">{analysis.name}</h1>
               <p className="mt-3 max-w-3xl text-gray-300 leading-relaxed">{analysis.summary}</p>
             </div>
-            <a
-              href={blockscoutUrl(analysis.address, chain)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 hover:border-blue-500 hover:text-blue-300"
-            >
-              View on Blockscout ↗
-            </a>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <ShareButton />
+              <a
+                href={blockscoutUrl(analysis.address, chain)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-gray-700 px-4 py-2 text-sm text-gray-300 hover:border-blue-500 hover:text-blue-300"
+              >
+                View on Blockscout ↗
+              </a>
+            </div>
           </div>
         </section>
 

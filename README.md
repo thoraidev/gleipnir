@@ -14,11 +14,11 @@ In Norse mythology, Gleipnir is the magical chain that binds Fenrir. It looked l
 
 - 🔍 **Permission Analysis** — Every privileged function in plain English
 - 👤 **Ownership Chain** — EOA, multisig, timelock, and governor detection
-- 🚩 **Red Flags** — Pause+drain combos, no timelock, 1-of-N multisigs, oracle manipulation vectors
+- 🚩 **Red Flags** — Pause+drain combos, no timelock, EOA supply control, dangerous call paths
 - 📊 **Risk Score** — 0–100 permission centralization score with breakdown
-- 📅 **Admin Timeline** — History of every admin action on the contract
-- 🤖 **Agent API** — `GET /api/v1/check?address=0x…` returns clean JSON for programmatic use
-- 🔗 **Shareable Reports** — `/report/0x…` with OpenGraph previews
+- 🌊 **Blast Radius** — DeFiLlama TVL context for high-confidence protocol matches
+- 🤖 **Agent API** — `GET /api/v1/check?address=0x…` returns deterministic JSON for programmatic use
+- 🔗 **Shareable Reports** — `/report/0x…` with OpenGraph previews and copy-link polish
 
 ## Quick Start
 
@@ -58,17 +58,17 @@ Response:
 | `ETHERSCAN_API_KEY` | Etherscan API key (fallback data source) |
 | `BASESCAN_API_KEY` | Basescan API key (Base chain) |
 | `ALCHEMY_RPC_URL` | Alchemy RPC for contract reads |
-| `ANTHROPIC_API_KEY` | Claude Sonnet for Solidity → plain English |
+| `ANTHROPIC_API_KEY` | Claude Haiku report-page narration (optional; API routes stay deterministic/no-LLM) |
 | `NEXT_PUBLIC_BASE_URL` | Deployed URL for shareable reports |
 
 Primary data source: **Blockscout** (no API key needed). Etherscan is fallback only.
 
 ## Stack
 
-- **Framework**: Next.js 15, App Router, TypeScript
+- **Framework**: Next.js 16, App Router, TypeScript
 - **Styling**: Tailwind v4
-- **Data**: Blockscout API (primary) + Etherscan (fallback)
-- **AI**: Anthropic Claude Sonnet
+- **Data**: Blockscout API (primary) + Etherscan fallback + DeFiLlama TVL context
+- **AI**: Anthropic Claude Haiku for optional human report-page narration
 - **Deployment**: Railway
 
 ## Built at ETHGlobal Open Agents — April 24–May 3, 2026

@@ -24,6 +24,7 @@ export default function Home() {
             { addr: '0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2', label: 'Aave V3' },
             { addr: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', label: 'USDC' },
             { addr: '0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84', label: 'Lido' },
+            { addr: '0xa1290d69c65a6fe4df752f95823fae25cb99e5a7', label: 'rsETH' },
           ].map(({ addr, label }) => (
             <Link
               key={addr}
@@ -37,7 +38,7 @@ export default function Home() {
 
         {/* Context quote */}
         <div className="border border-gray-800 rounded-xl p-5 text-sm text-gray-400 italic text-left leading-relaxed">
-          &ldquo;Five days ago, Kelp DAO lost $292M to a bridge exploit. The code was
+          &ldquo;In April 2026, Kelp DAO lost $292M to a bridge exploit. The code was
           fine — but the cascade took $6.4B out of Aave in 48 hours. Nobody could
           see the dependency chain. Gleipnir makes the invisible bindings visible.&rdquo;
         </div>

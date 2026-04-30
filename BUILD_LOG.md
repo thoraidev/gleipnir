@@ -10,7 +10,7 @@ It makes Ethereum smart contract permission structures legible to humans and age
 
 - Repo/path: `/root/.openclaw/workspace/projects/gleipnir`
 - Hackathon: ETHGlobal Open Agents, April 24–May 3, 2026
-- Stack: Next.js 15 App Router, TypeScript, Tailwind v4, Blockscout API, Etherscan fallback, Railway
+- Stack: Next.js 16 App Router, TypeScript, Tailwind v4, Blockscout API, Etherscan fallback, DeFiLlama TVL context, Railway
 - Core user: protocol users and agents that need to know contract permission risk before interacting
 
 ## Build Entries
@@ -375,7 +375,7 @@ Current known priorities from review feedback:
    - Safe/timelock/governor labels in the report.
 3. Improve plain-English descriptions with Claude as narrator, not source of truth.
 4. Add OpenGraph metadata / image for shareable report links.
-5. Polish search UX: replace `alert()` with inline error.
+5. Polish search UX: replace browser popup validation with inline error.
 6. Add share/copy URL button.
 7. Update landing copy to avoid stale “five days ago” wording.
 8. Test against 10+ real contracts and record remaining false positives.
@@ -491,6 +491,43 @@ npm run build
 ```
 
 All passed. Test suite now has 8 tests.
+
+### 2026-04-30 — Report narration, blast-radius context, and final submission polish
+
+This pass finished the hackathon-demo presentation layer without changing the deterministic analysis contract.
+
+Built:
+
+- Locked product narration to Claude Haiku and separated report-page LLM narration from the agent API.
+  - `/report/[address]` can request Haiku-polished summary/function prose.
+  - `/api/v1/check` and `/api/analyze` remain deterministic/no-LLM.
+  - Cache keys separate deterministic vs report-narrated results.
+- Added a report summary paragraph produced from deterministic findings only.
+  - Haiku can improve readability, not callers, scores, categories, red flags, or extracted facts.
+- Added DeFiLlama blast-radius context.
+  - High-confidence manual matches for demo protocols such as Aave V3, Lido, Uniswap V3, and Kelp/rsETH.
+  - Conservative name-based fallback.
+  - TVL context is explicitly not exact contract-controlled funds and does not affect permission risk scoring.
+- Tightened report-page card sizing for desktop readability.
+- Final submission polish:
+  - Replaced stale relative-date landing copy with date-stable April 2026 language.
+  - Added rsETH to landing-page demo links.
+  - Updated AI attribution to match the Haiku implementation.
+  - Replaced search-bar browser popup validation with inline validation feedback.
+  - Added a report copy-link button.
+  - Added lightweight report-page OpenGraph/Twitter metadata without triggering contract analysis in crawlers.
+  - Removed unused create-next-app SVG boilerplate assets.
+
+Verification:
+
+```bash
+npm run lint
+npx tsc --noEmit
+node --experimental-strip-types --test tests/*.test.ts
+npm run build
+```
+
+All passed. Test suite now has 11 tests.
 
 ## Verified Gates
 
