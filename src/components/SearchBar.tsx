@@ -17,10 +17,28 @@ export default function SearchBar() {
     if (/^0x[a-fA-F0-9]{40}$/i.test(addr)) {
       setLoading(true);
       router.push(`/report/${addr.toLowerCase()}`);
-    } else {
-      // TODO: ENS resolution via Alchemy/public RPC
-      setError('Please enter a valid Ethereum address starting with 0x. ENS resolution is coming soon.');
+      return;
     }
+
+    if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(addr)) {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/resolve-ens?name=${encodeURIComponent(addr)}`);
+        const data = await res.json();
+
+        if (!res.ok || !data.address) {
+          throw new Error(data.error || 'Could not resolve that ENS name.');
+        }
+
+        router.push(`/report/${data.address.toLowerCase()}`);
+      } catch (err) {
+        setLoading(false);
+        setError(err instanceof Error ? err.message : 'Could not resolve that ENS name.');
+      }
+      return;
+    }
+
+    setError('Enter a valid Ethereum address or ENS name like protocol.eth.');
   };
 
   return (
@@ -33,7 +51,7 @@ export default function SearchBar() {
             setInput(e.target.value);
             if (error) setError('');
           }}
-          placeholder="0x… contract address or protocol.eth"
+          placeholder="0x… contract address or name.eth"
           className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 font-mono text-sm transition-colors aria-[invalid=true]:border-red-500/70"
           autoComplete="off"
           spellCheck={false}
@@ -49,7 +67,7 @@ export default function SearchBar() {
         </button>
       </div>
       {error && (
-        <p id="address-error" className="text-left text-sm text-red-300">
+        <p id="address-error" className="text-left text-sm text-red-300" aria-live="polite">
           {error}
         </p>
       )}

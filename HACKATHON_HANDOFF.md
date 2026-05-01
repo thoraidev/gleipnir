@@ -1,6 +1,6 @@
 # Gleipnir / ETHGlobal Hackathon Handoff
 
-Updated: 2026-04-30 final submission polish pass
+Updated: 2026-05-01 ENS input + final submission polish
 
 ## Current Goal
 
@@ -16,8 +16,8 @@ Git:
 
 ```text
 main is intended to stay synced with origin/main after the final polish commit
-Latest shipped code before this polish pass: d8d6509 Tighten report risk card layout
-Run git log -1 for the exact final polish hash
+Latest local commit: 195f487 Add ENS name resolution
+Run git log -1 for the exact final hash after any final doc amendments
 ```
 
 Recent runtime-code commits:
@@ -48,6 +48,7 @@ Important docs:
 - `/report/[address]` renders real analysis.
 - `/api/analyze` returns full internal analysis JSON.
 - `/api/v1/check?address=0x...&chain=ethereum` returns agent-friendly JSON.
+- `/api/resolve-ens?name=resolver.eth` resolves ENS names before report navigation.
 - Shared analyzer lives at `src/lib/analyze-contract.ts`.
 - Report includes:
   - risk score / level
@@ -185,7 +186,8 @@ Most pre-submission review priorities are now addressed:
 6. SearchBar inline error — implemented.
 7. Stale relative-date landing copy — fixed.
 8. Share/copy URL button — implemented.
-9. Real-contract demo matrix — tested for Aave, Lido, Uniswap, rsETH/Kelp, USDC, ENS, GALA, and EOA cases.
+9. ENS name input — `/api/resolve-ens` resolves ENS names through Blockscout MCP before report navigation.
+10. Real-contract demo matrix — tested for Aave, Lido, Uniswap, rsETH/Kelp, USDC, ENS, GALA, and EOA cases.
 
 ## Recommended Next Step
 
@@ -206,4 +208,4 @@ Then likely Phase 2:
 
 ## One-Line Status
 
-Gleipnir is submission-ready for the hackathon demo: deterministic permission extraction, risk scoring, ownership MVP, report-page Haiku narration, DeFiLlama blast-radius context, polished landing/report UX, and deterministic agent API are live. Phase 2 remains protocol-specific control-graph tracing.
+Gleipnir is submission-ready for the hackathon demo: deterministic permission extraction, risk scoring, ownership MVP, report-page Haiku narration, DeFiLlama blast-radius context, ENS name input, polished landing/report UX, and deterministic agent API are live. Phase 2 remains protocol-specific control-graph tracing.

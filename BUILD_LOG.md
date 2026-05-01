@@ -518,6 +518,24 @@ Built:
   - Added lightweight report-page OpenGraph/Twitter metadata without triggering contract analysis in crawlers.
   - Removed unused create-next-app SVG boilerplate assets.
 
+### 2026-05-01 — ENS input integration for submission polish
+
+Added a small, real ENS integration for the search flow:
+
+- Added `GET /api/resolve-ens?name=protocol.eth`.
+  - Uses the existing Blockscout MCP `get_address_by_ens_name` path.
+  - Keeps API validation conservative: DNS-style ENS names only, max 255 characters.
+- Updated `SearchBar` so users can paste either a `0x…` address or an ENS name.
+  - ENS names resolve server-side, then navigate to the resolved `/report/[address]` page.
+  - Resolution errors stay inline with ARIA live feedback.
+- Updated README feature list and API example to reflect current Aave output.
+
+ENS smoke verification:
+
+- `resolver.eth` resolves to `0x231b0ee14048e9dccd1d247744d114a4eb5e8e63`.
+- The resolved address analyzes successfully as `PublicResolver`, `47 / ELEVATED`, with 12 privileged functions.
+- `aave.eth` currently resolves to the zero address through upstream ENS data and is rejected with `404 No Ethereum address found` instead of navigating to `0x000…000`.
+
 Verification:
 
 ```bash
@@ -570,9 +588,3 @@ Gleipnir can now:
   - inherited modifiers
 - Add ownership-chain intelligence for EOAs, multisigs, timelocks, and governors.
 - Consider silencing the Next.js workspace-root warning with explicit `turbopack.root`.
-
-## Separation From ENS Work
-
-This ETH hackathon build log belongs to **Gleipnir**.
-
-Do not use ENSFall, ENS marketplace, NamePact, ENS primary-name, or other ENS project history as Gleipnir build-log material unless explicitly requested for comparison.

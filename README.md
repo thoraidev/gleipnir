@@ -18,6 +18,7 @@ In Norse mythology, Gleipnir is the magical chain that binds Fenrir. It looked l
 - 📊 **Risk Score** — 0–100 permission centralization score with breakdown
 - 🌊 **Blast Radius** — DeFiLlama TVL context for high-confidence protocol matches
 - 🤖 **Agent API** — `GET /api/v1/check?address=0x…` returns deterministic JSON for programmatic use
+- 🧭 **ENS Input** — Paste `protocol.eth`; Gleipnir resolves it before running contract analysis
 - 🔗 **Shareable Reports** — `/report/0x…` with OpenGraph previews and copy-link polish
 
 ## Quick Start
@@ -41,10 +42,10 @@ Response:
 ```json
 {
   "address": "0x...",
-  "name": "Pool",
-  "riskScore": 42,
-  "riskLevel": "MODERATE",
-  "ultimateControl": "4/6 multisig with 48h timelock",
+  "name": "PoolInstance",
+  "riskScore": 63,
+  "riskLevel": "HIGH",
+  "ultimateControl": "Ownership-chain analysis pending",
   "redFlags": [...],
   "privilegedFunctions": [...],
   "gleipnirUrl": "https://gleipnir.up.railway.app/report/0x..."
