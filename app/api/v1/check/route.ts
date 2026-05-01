@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { AnalyzeContractError, analyzeContract, normalizeChain } from '@/lib/analyze-contract';
 import type { AgentCheckResponse } from '@/lib/types';
 
+const CANONICAL_BASE_URL = 'https://gleipnir.up.railway.app';
+
 /**
  * Agent-friendly permission check endpoint.
  * Returns clean JSON optimized for programmatic consumption.
@@ -11,6 +13,39 @@ import type { AgentCheckResponse } from '@/lib/types';
  * Example:
  *   curl "https://gleipnir.up.railway.app/api/v1/check?address=0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"
  */
+function firstHeaderValue(value: string | null): string | null {
+  return value?.split(',')[0]?.trim() || null;
+}
+
+function normalizeHost(value: string | null): string | null {
+  const host = firstHeaderValue(value)
+    ?.replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '');
+
+  return host || null;
+}
+
+function requestBaseUrl(req: NextRequest, fallbackOrigin: string) {
+  const fallbackHost = normalizeHost(new URL(fallbackOrigin).host);
+  const hostCandidates = [
+    normalizeHost(req.headers.get('x-forwarded-host')),
+    normalizeHost(req.headers.get('host')),
+    fallbackHost,
+  ].filter((host): host is string => Boolean(host));
+
+  const host =
+    hostCandidates.find((candidate) => candidate === 'gleipnir.up.railway.app') ||
+    hostCandidates.find((candidate) => !candidate.includes('-production')) ||
+    hostCandidates[0];
+
+  if (!host) return fallbackOrigin.replace(/\/$/, '');
+
+  const forwardedProto = firstHeaderValue(req.headers.get('x-forwarded-proto'));
+  const protocol = forwardedProto || (/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host) ? 'http' : 'https');
+
+  return `${protocol}://${host}`.replace(/\/$/, '');
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);
   const address = searchParams.get('address');
@@ -28,7 +63,10 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || origin).replace(/\/$/, '');
+  const publicRequestBaseUrl = requestBaseUrl(req, origin);
+  const configuredBaseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, '');
+  const isLocalRequest = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(publicRequestBaseUrl);
+  const baseUrl = isLocalRequest ? configuredBaseUrl || publicRequestBaseUrl : CANONICAL_BASE_URL;
 
   try {
     const data = await analyzeContract(address, chain, { llmDescriptions: false });

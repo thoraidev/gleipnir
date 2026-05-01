@@ -536,6 +536,11 @@ ENS smoke verification:
 - The resolved address analyzes successfully as `PublicResolver`, `47 / ELEVATED`, with 12 privileged functions.
 - `aave.eth` currently resolves to the zero address through upstream ENS data and is rejected with `404 No Ethereum address found` instead of navigating to `0x000…000`.
 
+Canonical URL follow-up:
+
+- Updated `/api/v1/check` so generated `gleipnirUrl` values use the canonical final Railway URL in production.
+- This prevents stale `NEXT_PUBLIC_BASE_URL`, Railway fallback origins, or proxy host behavior from leaking old Railway domains into agent API responses.
+
 Verification:
 
 ```bash
