@@ -16,7 +16,7 @@ Git:
 
 ```text
 main is intended to stay synced with origin/main after the final polish commit
-Latest local commit: 195f487 Add ENS name resolution
+Latest runtime/API fixes: e524f4b Add ENS name resolution; ca2055f Use request origin for API report links
 Run git log -1 for the exact final hash after any final doc amendments
 ```
 
