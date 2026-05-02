@@ -15,6 +15,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Gleipnir — Permission Risk Analyzer",
   description: "Smart contract permission extraction and risk scoring for humans and agents.",
+  icons: {
+    icon: "/gleipnir-logo.jpg",
+    apple: "/gleipnir-logo.jpg",
+  },
 };
 
 export default function RootLayout({

@@ -1,3 +1,4 @@
+import GleipnirLogo from '@/components/GleipnirLogo';
 import SearchBar from '@/components/SearchBar';
 import Link from 'next/link';
 
@@ -7,7 +8,9 @@ export default function Home() {
       <div className="max-w-2xl w-full text-center space-y-8">
         {/* Logo + name */}
         <div className="space-y-3">
-          <div className="text-6xl select-none">⛓️</div>
+          <div className="flex justify-center">
+            <GleipnirLogo size="hero" />
+          </div>
           <h1 className="text-5xl font-bold tracking-tight bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">
             Gleipnir
           </h1>

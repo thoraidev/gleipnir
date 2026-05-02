@@ -1,3 +1,4 @@
+import GleipnirLogo from '@/components/GleipnirLogo';
 import Link from 'next/link';
 
 export default function LoadingReport() {
@@ -5,8 +6,9 @@ export default function LoadingReport() {
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <div className="flex items-center gap-3 text-sm">
-          <Link href="/" className="text-gray-400 hover:text-white transition-colors">
-            ⛓️ Gleipnir
+          <Link href="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+            <GleipnirLogo />
+            <span>Gleipnir</span>
           </Link>
           <span className="text-gray-700">/</span>
           <span className="text-gray-500">analyzing…</span>

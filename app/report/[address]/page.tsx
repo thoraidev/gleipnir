@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { AnalyzeContractError, analyzeContract, normalizeChain } from '@/lib/analyze-contract';
 import { blockscoutUrl } from '@/lib/blockscout';
+import GleipnirLogo from '@/components/GleipnirLogo';
 import ShareButton from '@/components/ShareButton';
 import type { ContractAnalysis } from '@/lib/analyze-contract';
 import type { PermissionedFunction, RedFlag, RiskBreakdown } from '@/lib/types';
@@ -393,8 +394,9 @@ function ErrorReport({ address, message, status }: { address: string; message: s
     <main className="min-h-screen bg-gray-950 text-white">
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         <div className="flex items-center gap-3 text-sm">
-          <Link href="/" className="text-gray-400 hover:text-white transition-colors">
-            ⛓️ Gleipnir
+          <Link href="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+            <GleipnirLogo />
+            <span>Gleipnir</span>
           </Link>
           <span className="text-gray-700">/</span>
           <span className="font-mono text-xs text-gray-300">{address}</span>
@@ -439,8 +441,9 @@ export default async function ReportPage({ params, searchParams }: Props) {
       <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3 text-sm">
-            <Link href="/" className="text-gray-400 hover:text-white transition-colors">
-              ⛓️ Gleipnir
+            <Link href="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+              <GleipnirLogo />
+              <span>Gleipnir</span>
             </Link>
             <span className="text-gray-700">/</span>
             <a
