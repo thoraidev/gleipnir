@@ -5,13 +5,13 @@ type GleipnirLogoProps = {
 };
 
 const sizeClasses = {
-  hero: 'h-28 w-72 md:h-32 md:w-80',
-  nav: 'h-6 w-16',
+  hero: 'h-44 w-44 md:h-56 md:w-56',
+  nav: 'h-8 w-8',
 };
 
 const imageSizes = {
-  hero: { width: 320, height: 128 },
-  nav: { width: 64, height: 24 },
+  hero: { width: 224, height: 224 },
+  nav: { width: 32, height: 32 },
 };
 
 export default function GleipnirLogo({ size = 'nav' }: GleipnirLogoProps) {
