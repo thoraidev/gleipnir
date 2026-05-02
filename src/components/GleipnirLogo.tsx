@@ -5,22 +5,22 @@ type GleipnirLogoProps = {
 };
 
 const sizeClasses = {
-  hero: 'h-36 w-36 md:h-44 md:w-44',
-  nav: 'h-8 w-8',
+  hero: 'h-28 w-72 md:h-32 md:w-80',
+  nav: 'h-6 w-16',
 };
 
 const imageSizes = {
-  hero: 176,
-  nav: 32,
+  hero: { width: 320, height: 128 },
+  nav: { width: 64, height: 24 },
 };
 
 export default function GleipnirLogo({ size = 'nav' }: GleipnirLogoProps) {
   return (
     <Image
-      src="/gleipnir-logo.jpg"
+      src="/gleipnir-logo.png"
       alt="Gleipnir logo"
-      width={imageSizes[size]}
-      height={imageSizes[size]}
+      width={imageSizes[size].width}
+      height={imageSizes[size].height}
       className={`${sizeClasses[size]} object-contain`}
       priority={size === 'hero'}
     />
